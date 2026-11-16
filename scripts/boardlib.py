@@ -1,7 +1,11 @@
 import cv2
 
-def find_board(img, y=None):
+
+def find_board(img, y=None, box=None):
     H, W = img.shape[:2]
+    if box is not None:               # box = (x, y, size)
+        bx, by, bs = box
+        return img[by:by+bs, bx:bx+bs]
     if y is not None:                 # manual mode: board is full width
         return img[y:y+W, 0:W]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -18,15 +22,18 @@ def find_board(img, y=None):
     s = min(w, h)
     return img[yy:yy+s, x:x+s]
 
+
 def split(board):
     step = board.shape[0] // 8
     return [[board[r*step:(r+1)*step, c*step:(c+1)*step]
              for c in range(8)] for r in range(8)]
 
+
 def center(sq):
     h = sq.shape[0]
     m = int(h * 0.15)
     return sq[m:h-m, m:h-m]
+
 
 def features(sq):
     g = cv2.cvtColor(center(sq), cv2.COLOR_BGR2GRAY)
@@ -34,9 +41,11 @@ def features(sq):
     e = cv2.Canny(g, 50, 150)
     return cv2.GaussianBlur(e, (5, 5), 0).astype("float32")
 
+
 def is_empty(sq):
     g = cv2.cvtColor(center(sq), cv2.COLOR_BGR2GRAY)
     return g.std() < 12
+
 
 def recognize_grid(squares, templates, max_score=15, show=False):
     grid = []
@@ -57,16 +66,13 @@ def recognize_grid(squares, templates, max_score=15, show=False):
             if show:
                 print(f"{r}{c} {best} {best_score:.1f}")
             if max_score is not None and best_score > max_score:
+                print(f"  dropped {r}{c} {best} {best_score:.1f}")
                 row.append(".")
             else:
                 row.append(best)
         grid.append(row)
     return grid
 
-def needs_flip(grid):
-    top = sum(p.isupper() for row in grid[:4] for p in row)
-    bottom = sum(p.isupper() for row in grid[4:] for p in row)
-    return top > bottom
 
 def grid_to_fen(grid, turn="w"):
     rows = []
@@ -85,5 +91,12 @@ def grid_to_fen(grid, turn="w"):
         rows.append(s)
     return "/".join(rows) + f" {turn} - - 0 1"
 
+
 def flip_grid(grid):
     return [row[::-1] for row in grid[::-1]]
+
+
+def needs_flip(grid):
+    top = sum(p.isupper() for row in grid[:4] for p in row)
+    bottom = sum(p.isupper() for row in grid[4:] for p in row)
+    return top > bottom

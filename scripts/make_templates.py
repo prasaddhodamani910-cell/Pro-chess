@@ -2,10 +2,20 @@ import cv2, pickle, sys
 from boardlib import *
 
 img = cv2.imread(sys.argv[1])
-y = int(sys.argv[3]) if len(sys.argv) > 3 else None
-board = find_board(img, y)
-if board is None:
-    print("Board not found. Add the Y number at the end of the command.")
+if img is None:
+    print("Can't open", sys.argv[1])
+    raise SystemExit
+y = None
+box = None
+for a in sys.argv[3:]:
+    if a.isdigit():
+        y = int(a)
+    elif a.startswith("crop="):
+        box = tuple(int(v) for v in a[5:].split(","))
+
+board = find_board(img, y, box)
+if board is None or board.size == 0:
+    print("Board not found.")
     raise SystemExit
 cv2.imwrite("output/preview.png", board)
 squares = split(board)
