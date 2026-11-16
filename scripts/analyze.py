@@ -13,8 +13,8 @@ if board is None:
     print("Board not found. Add the Y number.")
     raise SystemExit
 
-grid = recognize_grid(split(board), templates)
-if flip:
+grid = recognize_grid(split(board), templates, show="scores" in sys.argv)
+if "noflip" not in sys.argv and needs_flip(grid):
     grid = flip_grid(grid)
 fen = grid_to_fen(grid, turn)
 print("FEN:", fen)

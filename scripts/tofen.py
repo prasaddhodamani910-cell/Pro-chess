@@ -13,8 +13,8 @@ if board is None:
     raise SystemExit
 cv2.imwrite("output/preview.png", board)
 
-grid = recognize_grid(split(board), templates)
-if "flip" in sys.argv:
+grid = recognize_grid(split(board), templates, show="scores" in sys.argv)
+if "noflip" not in sys.argv and needs_flip(grid):
     grid = flip_grid(grid)
 fen = grid_to_fen(grid, turn)
 print("FEN:", fen)

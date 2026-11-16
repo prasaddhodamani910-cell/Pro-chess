@@ -38,7 +38,7 @@ def is_empty(sq):
     g = cv2.cvtColor(center(sq), cv2.COLOR_BGR2GRAY)
     return g.std() < 12
 
-def recognize_grid(squares, templates):
+def recognize_grid(squares, templates, max_score=15, show=False):
     grid = []
     for r in range(8):
         row = []
@@ -54,9 +54,19 @@ def recognize_grid(squares, templates):
                     score = abs(f - t).mean()
                     if score < best_score:
                         best, best_score = piece, score
-            row.append(best)
+            if show:
+                print(f"{r}{c} {best} {best_score:.1f}")
+            if max_score is not None and best_score > max_score:
+                row.append(".")
+            else:
+                row.append(best)
         grid.append(row)
     return grid
+
+def needs_flip(grid):
+    top = sum(p.isupper() for row in grid[:4] for p in row)
+    bottom = sum(p.isupper() for row in grid[4:] for p in row)
+    return top > bottom
 
 def grid_to_fen(grid, turn="w"):
     rows = []
