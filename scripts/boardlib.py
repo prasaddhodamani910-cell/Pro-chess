@@ -97,6 +97,13 @@ def flip_grid(grid):
 
 
 def needs_flip(grid):
-    top = sum(p.isupper() for row in grid[:4] for p in row)
-    bottom = sum(p.isupper() for row in grid[4:] for p in row)
-    return top > bottom
+    w_rows, b_rows = [], []
+    for r in range(8):
+        for c in range(8):
+            p = grid[r][c]
+            if p == ".":
+                continue
+            (w_rows if p.isupper() else b_rows).append(r)
+    if not w_rows or not b_rows:
+        return False
+    return sum(w_rows) / len(w_rows) < sum(b_rows) / len(b_rows)

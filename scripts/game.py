@@ -3,12 +3,13 @@ from boardlib import *
 
 # ---------- 1. Read what you typed after "python scripts/game.py" ----------
 folder = sys.argv[1]      # folder with the screenshots
-tfile = sys.argv[2]       # template file (.pkl)
+tfile = sys.argv[2]       # template file (.pkl), ignored when "ai" is used
 turn = sys.argv[3]        # w or b: who moves in the FIRST screenshot
 
 y = None
 box = None
 show = "scores" in sys.argv          # add the word "scores" to see match scores
+use_ai = "ai" in sys.argv            # add the word "ai" to use the AI model
 for a in sys.argv[4:]:
     if a.isdigit():
         y = int(a)                   # a plain number = board Y position
@@ -16,9 +17,17 @@ for a in sys.argv[4:]:
         box = tuple(int(v) for v in a[5:].split(","))
 
 DROP_LIMIT = 150                     # 150 = 1.5 pawns; lower = more sensitive
+AI_LOW = 0.80                        # AI confidence below this = check by eye
 
-# ---------- 2. Load templates and start Stockfish ----------
-templates = pickle.load(open(tfile, "rb"))
+# ---------- 2. Load the recognizer and start Stockfish ----------
+if use_ai:
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(here, "..", "ai"))
+    from ai_recognize import recognize_ai
+    templates = None
+else:
+    templates = pickle.load(open(tfile, "rb"))
+
 engine = chess.engine.SimpleEngine.popen_uci("stockfish")
 
 files = sorted(f for f in os.listdir(folder)
@@ -44,9 +53,16 @@ for i, name in enumerate(files):
     if i == 0:
         cv2.imwrite("output/preview.png", board)
 
-    # screenshot -> grid of pieces -> FEN
-    grid = recognize_grid(split(board), templates, max_score=40,
-                          show=(show and i == 0))
+    # screenshot -> grid of pieces
+    minc = None
+    if use_ai:
+        grid, conf = recognize_ai(board)
+        minc = min(min(row) for row in conf)      # weakest square
+    else:
+        grid = recognize_grid(split(board), templates, max_score=40,
+                              show=(show and i == 0))
+
+    # grid -> FEN
     if needs_flip(grid):
         grid = flip_grid(grid)
     side = turn if i % 2 == 0 else other      # whose move it is now
@@ -62,6 +78,8 @@ for i, name in enumerate(files):
     best = b.san(info["pv"][0]) if info.get("pv") else None
 
     line = f"{name}  eval {cur/100:+.2f}  {b.board_fen()}"
+    if minc is not None:
+        line += f"  [ai {minc:.2f}" + (" LOW]" if minc < AI_LOW else "]")
 
     # ---------- 5. Did the last move make things worse? ----------
     if prev is not None:
