@@ -66,3 +66,27 @@ Double-click **`run_pc.bat`** (or run `python scripts/web.py`) and visit **`http
    - Best move readout & engine evaluation score.
    - One-click **Copy FEN** and **Open in Lichess Analysis** buttons.
    - Side-to-move and board-flip controls.
+
+---
+
+## 📸 Screenshots
+
+### PC
+
+**PC Chess.com**
+
+![PC Chess.com](Result%20screenshot/PC_chesscom.jpg)
+
+**PC Lichess**
+
+![PC Lichess](Result%20screenshot/PC_lichess.jpg)
+
+### Android
+
+**Android Chess.com**
+
+![Android Chess.com](Result%20screenshot/android_chesscom.jpg)
+
+**Android Lichess**
+
+![Android Lichess](Result%20screenshot/android_lichess.jpg)
