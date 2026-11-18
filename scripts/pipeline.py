@@ -11,10 +11,23 @@ from boardlib import (find_board, split, recognize_grid, grid_to_fen,
 LOW_CONF = 0.80          # AI confidence below this = check the board by eye
 
 
+def _photo_fallback(img):
+    """Slower search for a small board inside a bigger picture (AI mode only)."""
+    sys.path.insert(0, os.path.join(HERE, "..", "ai"))
+    from photo_board import photo_box
+    box, quality = photo_box(img)
+    if box is None or quality < 0.6:
+        return None
+    x, y, s = box
+    return img[y:y+s, x:x+s]
+
+
 def read_board(img, use_ai=True, templates=None, crop=None, y=None, flip=None):
     """Screenshot (OpenCV image) -> grid of pieces.
     flip: None = auto, True = force flip, False = never flip."""
     board = find_board(img, y, crop)
+    if (board is None or board.size == 0) and use_ai and crop is None and y is None:
+        board = _photo_fallback(img)         # e.g. a photo of a screen
     if board is None or board.size == 0:
         return {"ok": False, "error": "Board not found"}
 
