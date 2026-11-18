@@ -3,6 +3,8 @@
 
 A fast, offline-capable chess board recognition and analysis suite that works on PC (Windows) and Android mobile devices.
 
+### IMP : use this mod on your risk chess.com and lichess acc can be baned, this project was build for only educational purposes only, and personal interest. 
+
 Detects digital chessboards (Chess.com, Lichess, diagrams, or screen shares), identifies all 64 squares, generates FEN positions, and calculates the best moves using integrated engines (Stockfish 19 on PC, and native high-speed engine on Android).
 
 ---
