@@ -23,16 +23,7 @@ def recognize_ai(board):
     Returns (grid, conf): 8x8 lists of piece letters ('.' = empty)
     and of confidences (0 to 1), top-left square first."""
     gray = cv2.cvtColor(board, cv2.COLOR_BGR2GRAY)
-    # Remove high-frequency screen moiré before downsampling if board is high-res
-    if gray.shape[0] > 400:
-        gray = cv2.GaussianBlur(gray, (3, 3), 0)
-    gray = cv2.resize(gray, (256, 256), interpolation=cv2.INTER_AREA)
-
-    # Stretch contrast if camera backlight washed out the blacks/whites
-    lo, hi = np.percentile(gray, (2, 98))
-    if hi - lo > 20 and (lo > 25 or hi < 230):
-        gray = np.clip((gray.astype("float32") - lo) * (255.0 / (hi - lo)), 0, 255)
-
+    gray = cv2.resize(gray, (256, 256), interpolation=cv2.INTER_LINEAR)
     gray = gray.astype("float32") / 255.0
 
     tiles = np.zeros((64, 1024), dtype="float32")
@@ -61,7 +52,6 @@ def recognize_ai(board):
         grid.append(grow)
         conf.append(crow)
     return grid, conf
-
 
 
 def weak_squares(conf, limit=0.9):

@@ -51,6 +51,40 @@ def read_board(img, use_ai=True, templates=None, crop=None, y=None, flip=None):
             "board": board}
 
 
+def find_stockfish():
+    """Locate Stockfish executable on Windows or Linux."""
+    sf_env = os.environ.get("STOCKFISH_PATH")
+    if sf_env and os.path.exists(sf_env):
+        return sf_env
+
+    root = os.path.dirname(HERE)
+    candidates = [
+        os.path.join(root, "bin", "stockfish.exe"),
+        os.path.join(root, "bin", "stockfish"),
+        os.path.join(HERE, "bin", "stockfish.exe"),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+
+    import shutil
+    for name in ("stockfish.exe", "stockfish"):
+        p = shutil.which(name)
+        if p:
+            return p
+
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        winget_pkg = os.path.join(local_app_data, "Microsoft", "WinGet", "Packages")
+        if os.path.exists(winget_pkg):
+            for root_dir, _, files in os.walk(winget_pkg):
+                for f in files:
+                    if f.lower().startswith("stockfish") and f.lower().endswith(".exe"):
+                        return os.path.join(root_dir, f)
+
+    return "stockfish"
+
+
 def analyze_image(path, turn="w", use_ai=True, templates_file=None,
                   crop=None, y=None, flip=None, think=3):
     """Screenshot file -> FEN, best move and score. Returns a dictionary:
@@ -76,21 +110,21 @@ def analyze_image(path, turn="w", use_ai=True, templates_file=None,
     out = {"ok": True, "error": None, "fen": fen, "board_text": str(b),
            "valid": b.is_valid(), "min_conf": r["min_conf"],
            "low_conf": r["min_conf"] is not None and r["min_conf"] < LOW_CONF,
-           "best_move": None, "score": None}
+           "best_move": None, "score": None, "stockfish_warning": None}
     if not out["valid"]:
         out["error"] = "Invalid position: check the recognition first"
         return out
 
-    path_sf = os.environ.get("STOCKFISH_PATH", "stockfish")
+    path_sf = find_stockfish()
     try:
         engine = chess.engine.SimpleEngine.popen_uci(path_sf)
+        try:
+            info = engine.analyse(b, chess.engine.Limit(time=think))
+            out["best_move"] = b.san(info["pv"][0]) if info.get("pv") else None
+            out["score"] = str(info["score"].pov(b.turn))
+        finally:
+            engine.quit()
     except Exception as e:
-        out["error"] = "Stockfish not found (%s)" % e
-        return out
-    try:
-        info = engine.analyse(b, chess.engine.Limit(time=think))
-    finally:
-        engine.quit()
-    out["best_move"] = b.san(info["pv"][0]) if info.get("pv") else None
-    out["score"] = str(info["score"].pov(b.turn))
+        out["stockfish_warning"] = "Stockfish engine not found or failed (%s)" % e
+        # Position is still valid and returned to user!
     return out

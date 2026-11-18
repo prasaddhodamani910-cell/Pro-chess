@@ -1,0 +1,34 @@
+com.chessvision.app-pngs-0 C:\Projects by Prasad\chessproject\android_app\app\build\generated\res\pngs\debug
+com.chessvision.app-resValues-1 C:\Projects by Prasad\chessproject\android_app\app\build\generated\res\resValues\debug
+com.chessvision.app-packageDebugResources-2 C:\Projects by Prasad\chessproject\android_app\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.chessvision.app-packageDebugResources-3 C:\Projects by Prasad\chessproject\android_app\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.chessvision.app-debug-4 C:\Projects by Prasad\chessproject\android_app\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.chessvision.app-debug-5 C:\Projects by Prasad\chessproject\android_app\app\src\debug\res
+com.chessvision.app-main-6 C:\Projects by Prasad\chessproject\android_app\app\src\main\res
+com.chessvision.app-lifecycle-process-2.6.2-7 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\0b3fe843dde5471f4672989ab555c6ce\transformed\lifecycle-process-2.6.2\res
+com.chessvision.app-emoji2-1.2.0-8 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\17f3b5e3b5177fd2af367710a0fe9aba\transformed\emoji2-1.2.0\res
+com.chessvision.app-lifecycle-runtime-2.6.2-9 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\26bf052fb15f9d12877d34af9fecd8cc\transformed\lifecycle-runtime-2.6.2\res
+com.chessvision.app-startup-runtime-1.1.1-10 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\33ef6ba1db3aea78394f6d4177aacd60\transformed\startup-runtime-1.1.1\res
+com.chessvision.app-core-ktx-1.13.1-11 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\3ed8e2cb71e147bee16d2f162b037b02\transformed\core-ktx-1.13.1\res
+com.chessvision.app-material-1.12.0-12 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\5095a7a0c6af34a4738a36200fc95018\transformed\material-1.12.0\res
+com.chessvision.app-core-runtime-2.2.0-13 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\5a18e6b66ae60e16f215fce5b1831296\transformed\core-runtime-2.2.0\res
+com.chessvision.app-lifecycle-livedata-core-2.6.2-14 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\5fabe6f0f19b3e4629f32a768c8b5cf9\transformed\lifecycle-livedata-core-2.6.2\res
+com.chessvision.app-lifecycle-livedata-2.6.2-15 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\6ccc63fa5d7c0c891de1c7ba642c8448\transformed\lifecycle-livedata-2.6.2\res
+com.chessvision.app-annotation-experimental-1.4.0-16 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\724618e3acbac0b6630cd78d962cfd92\transformed\annotation-experimental-1.4.0\res
+com.chessvision.app-profileinstaller-1.3.0-17 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\75891fb00c8e6aeb0faafea94b1ba298\transformed\profileinstaller-1.3.0\res
+com.chessvision.app-recyclerview-1.1.0-18 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\75bd052e313d6b67bc13cf7a19fa91bc\transformed\recyclerview-1.1.0\res
+com.chessvision.app-appcompat-resources-1.6.1-19 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\84f0c5c053a38ffcdb8a3a150a793ecc\transformed\appcompat-resources-1.6.1\res
+com.chessvision.app-constraintlayout-2.1.4-20 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\a1fd3975a347cfba15247500ef46c7e6\transformed\constraintlayout-2.1.4\res
+com.chessvision.app-core-1.13.1-21 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\a310b155118595bfa58675b53a2e9300\transformed\core-1.13.1\res
+com.chessvision.app-activity-1.8.0-22 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\a60a7bd1c29d67b2d58be11a8635f8fb\transformed\activity-1.8.0\res
+com.chessvision.app-transition-1.5.0-23 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\c17c38c9c54c53a73221eb831f490d2e\transformed\transition-1.5.0\res
+com.chessvision.app-lifecycle-viewmodel-2.6.2-24 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\c89e94e8f1044aec04bd7bf22ff40bfa\transformed\lifecycle-viewmodel-2.6.2\res
+com.chessvision.app-coordinatorlayout-1.1.0-25 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\ce7ada8709bef2ec259ca7449a301c2e\transformed\coordinatorlayout-1.1.0\res
+com.chessvision.app-cardview-1.0.0-26 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\d3b077953497aa9f9936725f3f44a15d\transformed\cardview-1.0.0\res
+com.chessvision.app-drawerlayout-1.1.1-27 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\d49f81b486e905bba60c2e0b0d442a76\transformed\drawerlayout-1.1.1\res
+com.chessvision.app-lifecycle-viewmodel-savedstate-2.6.2-28 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\d553d9a172b48749a83819d1b7ef17b6\transformed\lifecycle-viewmodel-savedstate-2.6.2\res
+com.chessvision.app-fragment-1.3.6-29 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\df97cd60d237296d726d8fc2fe70fe63\transformed\fragment-1.3.6\res
+com.chessvision.app-emoji2-views-helper-1.2.0-30 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\e1085133e63829bc54fa1437492e2c22\transformed\emoji2-views-helper-1.2.0\res
+com.chessvision.app-viewpager2-1.0.0-31 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\e5ea7cbac1d6bf47aec7ef854c5da9eb\transformed\viewpager2-1.0.0\res
+com.chessvision.app-appcompat-1.6.1-32 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\e5f8ecef7b854f93c3beadf140193aca\transformed\appcompat-1.6.1\res
+com.chessvision.app-savedstate-1.2.1-33 C:\Users\Pranali Dhodamani\.gradle\caches\transforms-4\ed35fb1d14a01a9eabdc04686e211ff1\transformed\savedstate-1.2.1\res

@@ -1,5 +1,6 @@
 import cv2, pickle, sys, os, chess, chess.engine
 from boardlib import *
+from pipeline import find_stockfish
 
 name, tfile, turn = sys.argv[1], sys.argv[2], sys.argv[3]
 
@@ -49,7 +50,7 @@ if not b.is_valid():
     print("Invalid position, check the recognition first.")
     raise SystemExit
 
-engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+engine = chess.engine.SimpleEngine.popen_uci(find_stockfish())
 info = engine.analyse(b, chess.engine.Limit(time=3))
 engine.quit()
 
