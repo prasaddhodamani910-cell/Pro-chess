@@ -40,6 +40,8 @@ Open the **[`desktop_app`](file:///C:/Projects%20by%20Prasad/chessproject/deskto
 Double-click **`run_pc.bat`** (or run `python scripts/web.py`) and visit **`http://127.0.0.1:8000`**.
 *Features:* Paste screenshots (`Ctrl+V`), drag & drop image files, or share your screen/tab.
 
+### IMP: Stockfish is not in the git repo u should include it by your self u may watch yt tutorial.
+
 ---
 
 ## 🖥️ PC Features
