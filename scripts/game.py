@@ -1,5 +1,6 @@
 import cv2, pickle, sys, os, chess, chess.engine
 from boardlib import *
+from pipeline import find_stockfish
 
 # ---------- 1. Read what you typed after "python scripts/game.py" ----------
 folder = sys.argv[1]      # folder with the screenshots
@@ -54,7 +55,7 @@ if use_ai:
 else:
     templates = pickle.load(open(tfile, "rb"))
 
-engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+engine = chess.engine.SimpleEngine.popen_uci(find_stockfish())
 
 files = sorted(f for f in os.listdir(folder)
                if f.lower().endswith((".png", ".jpg", ".jpeg")))

@@ -1,0 +1,627 @@
+:root {
+    --bg-main: #18191c;
+    --bg-panel: #222429;
+    --bg-header: #141517;
+    --border-color: #33363f;
+    --text-primary: #f0f0f0;
+    --text-secondary: #9ea3b0;
+    --accent-blue: #3692e7;
+    --accent-green: #629924;
+    --accent-red: #d33833;
+
+    /* Default: Chess.com Green */
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --sq-highlight: rgba(247, 247, 105, 0.55);
+    --sq-select: rgba(20, 85, 30, 0.5);
+    --sq-hint: rgba(46, 204, 113, 0.6);
+    --sq-check: rgba(231, 76, 60, 0.7);
+}
+
+/* Lichess Themes */
+body.theme-lichess-brown {
+    --sq-light: #f0d9b5;
+    --sq-dark: #b58863;
+    --sq-highlight: rgba(205, 210, 106, 0.7);
+}
+
+body.theme-lichess-blue {
+    --sq-light: #dee3e6;
+    --sq-dark: #8ca2ad;
+    --sq-highlight: rgba(100, 165, 230, 0.6);
+}
+
+body.theme-lichess-green {
+    --sq-light: #ffffdd;
+    --sq-dark: #86a666;
+    --sq-highlight: rgba(219, 211, 71, 0.65);
+}
+
+/* Chess.com Themes */
+body.theme-chesscom-green {
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --sq-highlight: rgba(247, 247, 105, 0.55);
+}
+
+body.theme-chesscom-wood {
+    --sq-light: #e0c59e;
+    --sq-dark: #a06b3a;
+    --sq-highlight: rgba(255, 230, 130, 0.6);
+}
+
+body.theme-chesscom-dark {
+    --sq-light: #4a4845;
+    --sq-dark: #272522;
+    --sq-highlight: rgba(135, 133, 130, 0.5);
+}
+
+body.theme-royal-purple {
+    --sq-light: #e3d8f1;
+    --sq-dark: #7b5296;
+    --sq-highlight: rgba(220, 170, 255, 0.6);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+}
+
+/* Header */
+header {
+    background: var(--bg-header);
+    border-bottom: 1px solid var(--border-color);
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.logo-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo-icon {
+    font-size: 26px;
+}
+
+.logo-text h1 {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #f5a623, #f8e71c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.logo-text .subtitle {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn {
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn:hover {
+    background: #2f323a;
+    border-color: #484c59;
+}
+
+.btn-primary {
+    background: #2b78e4;
+    border-color: #1e5cb3;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: #3b8bf0;
+}
+
+.elo-badge {
+    background: rgba(245, 166, 35, 0.15);
+    border: 1px solid rgba(245, 166, 35, 0.4);
+    color: #f5a623;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+/* Main Container */
+.app-container {
+    display: flex;
+    flex: 1;
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 16px;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+/* Left Board Section */
+.game-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Player Info Bars */
+.player-bar {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-panel);
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.player-details {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.player-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    background: #32353e;
+}
+
+.player-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.player-elo {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-left: 4px;
+}
+
+.captured-pieces {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 24px;
+    font-size: 12px;
+}
+
+.material-diff {
+    font-size: 12px;
+    font-weight: bold;
+    color: #8bc34a;
+    margin-left: 6px;
+}
+
+/* Board + Eval bar wrapper */
+.board-wrapper {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+/* Evaluation Bar */
+.eval-bar-container {
+    width: 24px;
+    background: #222;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+
+.eval-bar-black {
+    background: #383838;
+    width: 100%;
+    transition: height 0.3s ease;
+}
+
+.eval-bar-white {
+    background: #ffffff;
+    width: 100%;
+    flex: 1;
+    transition: height 0.3s ease;
+}
+
+.eval-text {
+    position: absolute;
+    bottom: 4px;
+    width: 100%;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 800;
+    color: #111;
+    text-shadow: 0 0 2px #fff;
+}
+
+/* Chess Board */
+.chess-board {
+    width: 540px;
+    height: 540px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    border: 3px solid #2a2c33;
+    position: relative;
+    touch-action: none;
+}
+
+.square {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+}
+
+.square.light {
+    background-color: var(--sq-light);
+}
+
+.square.dark {
+    background-color: var(--sq-dark);
+}
+
+/* Coordinates */
+.square .coord-file {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.square .coord-rank {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.square.light .coord-file,
+.square.light .coord-rank {
+    color: var(--sq-dark);
+}
+
+.square.dark .coord-file,
+.square.dark .coord-rank {
+    color: var(--sq-light);
+}
+
+/* Square highlights */
+.square.last-move {
+    background-color: var(--sq-highlight) !important;
+}
+
+.square.selected {
+    background-color: var(--sq-select) !important;
+}
+
+.square.hint {
+    background-color: var(--sq-hint) !important;
+}
+
+.square.check {
+    background-color: var(--sq-check) !important;
+}
+
+/* Move dots */
+.square.move-target::after {
+    content: '';
+    position: absolute;
+    width: 26%;
+    height: 26%;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.square.capture-target::after {
+    content: '';
+    position: absolute;
+    width: 82%;
+    height: 82%;
+    border: 5px solid rgba(0, 0, 0, 0.28);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* Piece SVG */
+.piece-svg {
+    width: 90%;
+    height: 90%;
+    pointer-events: none;
+    transition: transform 0.08s ease;
+}
+
+.square:hover .piece-svg {
+    transform: scale(1.05);
+}
+
+/* Right Control Panel */
+.panel-section {
+    width: 380px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    max-height: 640px;
+}
+
+.panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.panel-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.engine-status-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #2a3b2b;
+    color: #4caf50;
+    border: 1px solid #3d6040;
+}
+
+.engine-status-tag.thinking {
+    background: #3f351e;
+    color: #f5a623;
+    border-color: #695022;
+}
+
+/* Notation History */
+.notation-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 36px 1fr 1fr;
+    gap: 4px 8px;
+    font-size: 13px;
+    font-family: monospace;
+    max-height: 340px;
+}
+
+.notation-row-num {
+    color: var(--text-secondary);
+    text-align: right;
+    padding-right: 6px;
+}
+
+.notation-cell {
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.notation-cell:hover {
+    background: #333640;
+}
+
+.notation-cell.active {
+    background: #2b78e4;
+    color: #fff;
+    font-weight: bold;
+}
+
+/* Action Buttons Bar */
+.action-bar {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-color);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.action-bar .btn {
+    justify-content: center;
+    padding: 10px 6px;
+    font-size: 12px;
+}
+
+/* Settings Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-box {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    width: 480px;
+    max-width: 92vw;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.setting-label {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.setting-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.select-control {
+    background: #17181c;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    min-width: 170px;
+}
+
+/* Promotion Modal */
+.promo-box {
+    background: #2a2c33;
+    border: 2px solid #f5a623;
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    gap: 10px;
+}
+
+.promo-option {
+    width: 60px;
+    height: 60px;
+    background: #3a3d47;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.promo-option:hover {
+    background: #505463;
+}
+
+/* Responsive for Mobile */
+@media (max-width: 960px) {
+    .app-container {
+        flex-direction: column;
+        align-items: center;
+        padding: 8px;
+        gap: 12px;
+    }
+
+    .chess-board {
+        width: 92vw;
+        height: 92vw;
+        max-width: 440px;
+        max-height: 440px;
+    }
+
+    .panel-section {
+        width: 100%;
+        max-width: 440px;
+    }
+
+    .notation-panel {
+        max-height: 180px;
+    }
+}

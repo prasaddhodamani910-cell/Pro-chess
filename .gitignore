@@ -1,4 +1,74 @@
+# Python cache
 __pycache__/
 *.py[cod]
+*$py.class
+*.spec
+
+# Build & intermediate folders
+build/
+desktop_app/build/
+android_app/app/build/
+android_app/.gradle/
+.gradle/
+
+# Output images
 output/*
 !output/.gitkeep
+
+# Local Git backup
+.git_backup/
+
+# Private keys and certificates
+debug_key.pem
+debug_cert.der
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local environment
+.venv/
+venv/
+
+# Android / Gradle generated files
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# Local IDE files
+.idea/
+*.iml
+
+# Python generated files
+__pycache__/
+*.pyc
+
+# Private files
+debug_key.pem
+debug_cert.der
+.git_backup/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Gradle
+.gradle/
+**/.gradle/
+
+# Build outputs
+**/build/
+
+# Local backup
+.git_backup/
+
+# Private keys
+debug_key.pem
+debug_cert.der
+
+# Local SDK path and large bundled Stockfish binaries
+/android_app/local.properties
+/bin/stockfish.exe
+/desktop_app/bin/stockfish.exe
+/desktop_app/dist/*/_internal/bin/stockfish.exe

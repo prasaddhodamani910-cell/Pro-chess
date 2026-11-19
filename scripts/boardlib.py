@@ -92,12 +92,75 @@ def _refine(gray, box, rng=18):
 
 
 def auto_box(img):
-    """Find the board automatically. Returns (x, y, size) or None."""
+    """Find the board automatically on PC or mobile. Returns (x, y, size) or None."""
+    H, W = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    box, frac = _coarse(gray)
-    if box is None or frac < 0.75:
-        return None
-    return _refine(gray, box)
+    ii = _integral(gray)
+
+    # 1. Is the entire image already a cropped or nearly square board?
+    if 0.88 <= W / H <= 1.14 and min(H, W) >= 120:
+        s = min(H, W)
+        sc_whole = _checker_score(ii, np.array([[0, 0, s]]), max(4, int(s / 60)))[0]
+        if sc_whole >= 0.70:
+            return (0, 0, s)
+
+    # 2. If portrait (e.g. mobile screenshot), fast vertical-strip check
+    if H >= W:
+        box, frac = _coarse(gray)
+        if box is not None and frac >= 0.75:
+            return _refine(gray, box)
+
+    # 3. Contour candidate search (PC desktop, browser windows, cropped regions)
+    edges = cv2.dilate(cv2.Canny(gray, 50, 150), None, iterations=2)
+    cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    cands = []
+    for c in cnts:
+        x, yy, w, h = cv2.boundingRect(c)
+        if 0.85 < w / h < 1.15 and min(w, h) >= 140:
+            s = min(w, h)
+            cands.append((x, yy, s))
+
+    if cands:
+        cands_arr = np.array(cands)
+        scores = _checker_score(ii, cands_arr, max(4, int(cands_arr[:, 2].mean() / 60)))
+        best_i = int(np.argmax(scores))
+        if scores[best_i] >= 0.65:
+            return _refine(gray, cands[best_i])
+
+    # 4. Multi-scale sliding search for borderless / arbitrary desktop screenshots
+    sc = 300.0 / max(H, W)
+    sg = cv2.resize(gray, (int(W * sc), int(H * sc)), interpolation=cv2.INTER_AREA)
+    ii_small = _integral(sg)
+    sh, sw = sg.shape
+    grid_cands = []
+    min_s = max(8, int(120 * sc))
+    max_s = min(sh, sw)
+    for S in range(min_s, max_s + 1, max(4, int(24 * sc))):
+        step = max(2, int(S // 8))
+        for y0 in range(0, sh - S + 1, step):
+            for x0 in range(0, sw - S + 1, step):
+                grid_cands.append((x0, y0, S))
+
+    if grid_cands:
+        cands_arr = np.array(grid_cands)
+        scores = _checker_score(ii_small, cands_arr, max(2, int(6 * sc / 0.5)))
+        best_i = int(np.argmax(scores))
+        if scores[best_i] >= 0.70:
+            top_box = (grid_cands[best_i][0] / sc, grid_cands[best_i][1] / sc, grid_cands[best_i][2] / sc)
+            return _refine(gray, top_box)
+
+    # 5. Last resort fallback
+    best, area = None, 0
+    for c in cnts:
+        x, yy, w, h = cv2.boundingRect(c)
+        if 0.88 < w / h < 1.14 and w >= 150 and w * h > area:
+            best, area = (x, yy, w, h), w * h
+    if best is not None:
+        x, yy, w, h = best
+        s = min(w, h)
+        return (x, yy, s)
+
+    return None
 
 
 def find_board(img, y=None, box=None):
@@ -111,20 +174,7 @@ def find_board(img, y=None, box=None):
     if auto is not None:
         bx, by, bs = auto
         return img[by:by+bs, bx:bx+bs]
-    # last resort: the old outline search
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.dilate(cv2.Canny(gray, 50, 150), None, iterations=2)
-    cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    best, area = None, 0
-    for c in cnts:
-        x, yy, w, h = cv2.boundingRect(c)
-        if 0.9 < w / h < 1.1 and w > W * 0.5 and w * h > area:
-            best, area = (x, yy, w, h), w * h
-    if best is None:
-        return None
-    x, yy, w, h = best
-    s = min(w, h)
-    return img[yy:yy+s, x:x+s]
+    return None
 
 
 def split(board):

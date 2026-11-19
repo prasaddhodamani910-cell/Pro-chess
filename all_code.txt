@@ -1,0 +1,1428 @@
+==> scripts/photo_board.py <==
+"""Find a board inside a bigger picture (for example a photo of a screen).
+Used only as a fallback when the normal screenshot finder fails."""
+import os, sys, itertools
+import cv2
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+import boardlib as B
+from ai_recognize import recognize_ai
+
+
+def _candidates(img, K=8):
+    """Square-ish blobs made of two of the picture's main colours."""
+    H, W = img.shape[:2]
+    sc = 800.0 / max(H, W)
+    small = cv2.resize(img, (int(W * sc), int(H * sc)), interpolation=cv2.INTER_AREA)
+    lab = cv2.cvtColor(small, cv2.COLOR_BGR2LAB)
+    h, w = lab.shape[:2]
+    data = lab.reshape(-1, 3).astype("float32")
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 15, 1.0)
+    cv2.setRNGSeed(1)
+    _, _, centers = cv2.kmeans(data[::4], K, None, crit, 1, cv2.KMEANS_PP_CENTERS)
+    labels = ((data[:, None, :] - centers[None, :, :]) ** 2).sum(2).argmin(1).reshape(h, w)
+    seen, out = set(), []
+    for i, j in itertools.combinations(range(K), 2):
+        m = (((labels == i) | (labels == j)) * 255).astype("uint8")
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+        cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts:
+            x, y, bw, bh = cv2.boundingRect(c)
+            if bw < 0.2 * w or not (0.9 < bw / bh < 1.1):
+                continue
+            if cv2.contourArea(c) / float(bw * bh) < 0.7:
+                continue
+            key = (x // 12, y // 12, bw // 12)
+            if key not in seen:
+                seen.add(key)
+                out.append((x / sc, y / sc, bw / sc))
+    return out
+
+
+def _quality(img, box):
+    """How sure is the AI about this crop? (higher = better)"""
+    x, y, s = box
+    H, W = img.shape[:2]
+    if x < 0 or y < 0 or s < 100 or x + s > W or y + s > H:
+        return -1.0
+    _, conf = recognize_ai(img[y:y+s, x:x+s])
+    flat = np.array(conf).ravel()
+    return 0.5 * float(flat.min()) + 0.5 * float(flat.mean())
+
+
+def _polish(img, box):
+    """Nudge x, y, size a few pixels at a time while the AI gets more confident."""
+    best = tuple(int(round(v)) for v in box)
+    bq = _quality(img, best)
+    for step in (8, 4, 2):
+        improved = True
+        while improved:
+            improved = False
+            for d in ((step, 0, 0), (-step, 0, 0), (0, step, 0), (0, -step, 0),
+                      (0, 0, step), (0, 0, -step)):
+                cand = (best[0] + d[0], best[1] + d[1], best[2] + d[2])
+                q = _quality(img, cand)
+                if q > bq + 1e-4:
+                    best, bq, improved = cand, q, True
+    return best, bq
+
+
+def photo_box(img):
+    """Returns ((x, y, size), quality) or (None, 0)."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ii = B._integral(gray)
+    scored = []
+    for cx, cy, cs in _candidates(img):
+        x, y, s = B._refine(gray, (cx, cy, cs), rng=max(10, int(0.04 * cs)))
+        f = B._checker_score(ii, np.array([[x, y, s]]), max(6, int(s / 60)))[0]
+        scored.append((f, (x, y, s)))
+    scored.sort(reverse=True)
+    best, bq = None, 0.0
+    for f, box in scored[:3]:                 # polish the three most board-like
+        if f < 0.5:
+            continue
+        pb, q = _polish(img, box)
+        if q > bq:
+            best, bq = pb, q
+    return best, bq
+==> scripts/game.py <==
+import cv2, pickle, sys, os, chess, chess.engine
+from boardlib import *
+
+# ---------- 1. Read what you typed after "python scripts/game.py" ----------
+folder = sys.argv[1]      # folder with the screenshots
+tfile = sys.argv[2]       # template file (.pkl), ignored when "ai" is used
+turn = sys.argv[3]        # w or b: who moves in the FIRST screenshot
+
+y = None
+box = None
+start_num = 1                        # move number of the FIRST screenshot
+show = "scores" in sys.argv          # show template match scores
+use_ai = "ai" in sys.argv            # use the AI model
+show_fen = "fen" in sys.argv         # print the board FEN on every line
+for a in sys.argv[4:]:
+    if a.isdigit():
+        y = int(a)                   # a plain number = board Y position
+    elif a.startswith("crop="):      # crop=X,Y,SIZE
+        box = tuple(int(v) for v in a[5:].split(","))
+    elif a.startswith("move="):      # move=3 -> first screenshot is move 3
+        start_num = int(a[5:])
+
+DROP_LIMIT = 150                     # 150 = 1.5 pawns; lower = more sensitive
+AI_LOW = 0.80                        # AI confidence below this = check by eye
+
+
+def find_move(prev_board, cur_placement):
+    """Which move turns the previous position into the current one?
+    Returns it in normal notation (like Nf3), or None if no move fits."""
+    pb = prev_board.copy()
+    pb.castling_rights = chess.BB_CORNERS        # allow castling to be found
+    pb.castling_rights = pb.clean_castling_rights()
+    for m in list(pb.legal_moves):
+        san = pb.san(m)
+        pb.push(m)
+        same = pb.board_fen() == cur_placement
+        pb.pop()
+        if same:
+            return san
+    return None
+
+
+def label(num, side, san):
+    """5.Qd3 for White, 5...Qxd3 for Black."""
+    return f"{num}.{san}" if side == "w" else f"{num}...{san}"
+
+
+# ---------- 2. Load the recognizer and start Stockfish ----------
+if use_ai:
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(here, "..", "ai"))
+    from ai_recognize import recognize_ai
+    templates = None
+else:
+    templates = pickle.load(open(tfile, "rb"))
+
+engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+
+files = sorted(f for f in os.listdir(folder)
+               if f.lower().endswith((".png", ".jpg", ".jpeg")))
+other = "b" if turn == "w" else "w"
+
+prev = None            # evaluation of the previous position
+prev_best = None       # best move label in the previous position
+prev_board = None      # the previous position as a chess board
+prev_side = None       # who was to move in the previous position
+prev_num = None        # move number of the previous position
+mistakes = []          # list of (move label, pawns lost)
+
+# ---------- 3. Go through the screenshots one by one ----------
+for i, name in enumerate(files):
+    img = cv2.imread(os.path.join(folder, name))
+    if img is None:
+        print(name, "can't open")
+        prev = prev_best = prev_board = None
+        continue
+
+    board = find_board(img, y, box)
+    if board is None or board.size == 0:
+        print(name, "board not found")
+        prev = prev_best = prev_board = None
+        continue
+    if i == 0:
+        cv2.imwrite("output/preview.png", board)
+
+    # screenshot -> grid of pieces
+    minc = None
+    if use_ai:
+        grid, conf = recognize_ai(board)
+        minc = min(min(row) for row in conf)      # weakest square
+    else:
+        grid = recognize_grid(split(board), templates, max_score=40,
+                              show=(show and i == 0))
+
+    # grid -> chess position
+    if needs_flip(grid):
+        grid = flip_grid(grid)
+    side = turn if i % 2 == 0 else other          # whose move it is now
+    num = start_num + (i + (1 if turn == "b" else 0)) // 2
+    b = chess.Board(grid_to_fen(grid, side))
+    if not b.is_valid():
+        print(name, "invalid position:", b.board_fen())
+        prev = prev_best = prev_board = None
+        continue
+
+    # ---------- 4. Which move was played to get here? ----------
+    played = "start"
+    if prev_board is not None:
+        san = find_move(prev_board, b.board_fen())
+        played = label(prev_num, prev_side, san) if san else "?"
+
+    # ---------- 5. Ask Stockfish ----------
+    info = engine.analyse(b, chess.engine.Limit(time=1))
+    cur = info["score"].white().score(mate_score=10000)   # + = White better
+    best = label(num, side, b.san(info["pv"][0])) if info.get("pv") else None
+
+    line = f"{name}  {played}  eval {cur/100:+.2f}"
+    if show_fen:
+        line += f"  {b.board_fen()}"
+    if minc is not None and minc < AI_LOW:
+        line += f"  [ai LOW {minc:.2f}]"
+
+    # ---------- 6. Did that move make things worse? ----------
+    if prev is not None:
+        mover = "White" if side == "b" else "Black"       # who just moved
+        loss = (prev - cur) if side == "b" else (cur - prev)
+        if loss > DROP_LIMIT:
+            line += (f"   <-- big drop by {mover} ({loss/100:.1f} pawns),"
+                     f" better was {prev_best}")
+            mistakes.append((played, loss / 100))
+    print(line)
+
+    prev, prev_best = cur, best
+    prev_board, prev_side, prev_num = b, side, num
+
+engine.quit()
+
+# ---------- 7. Summary ----------
+print()
+if mistakes:
+    print("Mistakes:", ", ".join(f"{m} ({p:.1f})" for m, p in mistakes))
+else:
+    print("No big drops found.")
+==> scripts/boardlib.py <==
+import cv2
+import numpy as np
+
+
+# ---------- automatic board finder (checkerboard pattern + edge refine) ----------
+
+def _integral(gray):
+    return cv2.integral(gray.astype("float32"))
+
+
+def _patch_means(ii, xs, ys, size):
+    H1, W1 = ii.shape
+    x0 = np.clip(xs, 0, W1 - 1 - size).astype(int)
+    y0 = np.clip(ys, 0, H1 - 1 - size).astype(int)
+    x1, y1 = x0 + size, y0 + size
+    return (ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0]) / (size * size)
+
+
+def _checker_score(ii, cand, size):
+    """How much does each candidate box look like an 8x8 two-colour checkerboard?"""
+    N = len(cand)
+    x0 = cand[:, 0][:, None, None].astype(float)
+    y0 = cand[:, 1][:, None, None].astype(float)
+    sq = cand[:, 2][:, None, None].astype(float) / 8
+    r = np.arange(8)[None, :, None]
+    c = np.arange(8)[None, None, :]
+    xs = np.broadcast_to(x0 + c * sq + 0.12 * sq, (N, 8, 8))
+    ys = np.broadcast_to(y0 + r * sq + 0.12 * sq, (N, 8, 8))
+    v = _patch_means(ii, xs, ys, size)
+    par = ((np.arange(8)[:, None] + np.arange(8)[None, :]) % 2).astype(bool)
+    A, B = v[:, ~par], v[:, par]
+    mA, mB = np.median(A, axis=1), np.median(B, axis=1)
+    contrast = np.abs(mA - mB)
+    tol = np.maximum(5.0, 0.15 * contrast)
+    good = ((np.abs(A - mA[:, None]) < tol[:, None]).sum(1)
+            + (np.abs(B - mB[:, None]) < tol[:, None]).sum(1))
+    frac = good / 64.0
+    frac[contrast < 12] = 0
+    return frac
+
+
+def _coarse(gray, sc=0.5):
+    H, W = gray.shape
+    sg = cv2.resize(gray, (int(W * sc), int(H * sc)), interpolation=cv2.INTER_AREA)
+    ii = _integral(sg)
+    h, w = sg.shape
+    cands = []
+    for x0 in range(0, int(0.2 * w), 2):
+        for S in {w - x0, w - 2 * x0}:      # board touches the right edge, or is centred
+            if S < 0.6 * w:
+                continue
+            for y0 in range(0, h - S + 1, 2):
+                cands.append((x0, y0, S))
+    if not cands:
+        return None, 0.0
+    cands = np.array(cands)
+    frac = _checker_score(ii, cands, max(4, int(12 * sc / 0.5)))
+    j = int(np.argmax(frac))
+    top = cands[frac >= frac[j] - 1e-9]
+    return np.median(top, axis=0) / sc, float(frac[j])
+
+
+def _edge_energy(gx, gy, X0, Y0, S, n, W, H):
+    ks = np.arange(0, 9)
+    sq = S / 8
+    t = np.linspace(0, S - 1, n).astype(int)
+    hy = np.clip(np.round(Y0 + ks * sq).astype(int), 0, H - 1)
+    vx = np.clip(np.round(X0 + ks * sq).astype(int), 0, W - 1)
+    return (gy[hy[:, None], (X0 + t)[None, :]].sum()
+            + gx[(Y0 + t)[:, None], vx[None, :]].sum())
+
+
+def _refine(gray, box, rng=18):
+    H, W = gray.shape
+    x0, y0, S = [int(round(v)) for v in box]
+    g = cv2.GaussianBlur(gray, (0, 0), 1.0).astype("float32")
+    gx = np.abs(cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3))
+    gy = np.abs(cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3))
+    best, bs = (x0, y0, S), -1.0
+    for step, span, n in ((2, rng, 48), (1, 3, 64)):   # coarse pass, then fine pass
+        cx, cy, cs = best
+        for ds in range(-span, span + 1, step):
+            for dx in range(-span, span + 1, step):
+                for dy in range(-span, span + 1, step):
+                    X0, Y0, S2 = cx + dx, cy + dy, cs + ds
+                    if X0 < 0 or Y0 < 0 or X0 + S2 > W or Y0 + S2 > H:
+                        continue
+                    e = _edge_energy(gx, gy, X0, Y0, S2, n, W, H)
+                    if e > bs:
+                        bs, best = e, (X0, Y0, S2)
+    return best
+
+
+def auto_box(img):
+    """Find the board automatically. Returns (x, y, size) or None."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    box, frac = _coarse(gray)
+    if box is None or frac < 0.75:
+        return None
+    return _refine(gray, box)
+
+
+def find_board(img, y=None, box=None):
+    H, W = img.shape[:2]
+    if box is not None:               # box = (x, y, size)
+        bx, by, bs = box
+        return img[by:by+bs, bx:bx+bs]
+    if y is not None:                 # manual mode: board is full width
+        return img[y:y+W, 0:W]
+    auto = auto_box(img)              # automatic: look for the checkerboard
+    if auto is not None:
+        bx, by, bs = auto
+        return img[by:by+bs, bx:bx+bs]
+    # last resort: the old outline search
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.dilate(cv2.Canny(gray, 50, 150), None, iterations=2)
+    cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    best, area = None, 0
+    for c in cnts:
+        x, yy, w, h = cv2.boundingRect(c)
+        if 0.9 < w / h < 1.1 and w > W * 0.5 and w * h > area:
+            best, area = (x, yy, w, h), w * h
+    if best is None:
+        return None
+    x, yy, w, h = best
+    s = min(w, h)
+    return img[yy:yy+s, x:x+s]
+
+
+def split(board):
+    step = board.shape[0] // 8
+    return [[board[r*step:(r+1)*step, c*step:(c+1)*step]
+             for c in range(8)] for r in range(8)]
+
+
+def center(sq):
+    h = sq.shape[0]
+    m = int(h * 0.15)
+    return sq[m:h-m, m:h-m]
+
+
+def features(sq):
+    g = cv2.cvtColor(center(sq), cv2.COLOR_BGR2GRAY)
+    g = cv2.resize(g, (32, 32))
+    e = cv2.Canny(g, 50, 150)
+    return cv2.GaussianBlur(e, (5, 5), 0).astype("float32")
+
+
+def is_empty(sq):
+    g = cv2.cvtColor(center(sq), cv2.COLOR_BGR2GRAY)
+    return g.std() < 12
+
+
+def recognize_grid(squares, templates, max_score=15, show=False):
+    grid = []
+    for r in range(8):
+        row = []
+        for c in range(8):
+            sq = squares[r][c]
+            if is_empty(sq):
+                row.append(".")
+                continue
+            f = features(sq)
+            best, best_score = "?", 1e9
+            for piece, plist in templates.items():
+                for t in plist:
+                    score = abs(f - t).mean()
+                    if score < best_score:
+                        best, best_score = piece, score
+            if show:
+                print(f"{r}{c} {best} {best_score:.1f}")
+            if max_score is not None and best_score > max_score:
+                print(f"  dropped {r}{c} {best} {best_score:.1f}")
+                row.append(".")
+            else:
+                row.append(best)
+        grid.append(row)
+    return grid
+
+
+def grid_to_fen(grid, turn="w"):
+    rows = []
+    for row in grid:
+        s, empty = "", 0
+        for p in row:
+            if p == ".":
+                empty += 1
+            else:
+                if empty:
+                    s += str(empty)
+                    empty = 0
+                s += p
+        if empty:
+            s += str(empty)
+        rows.append(s)
+    return "/".join(rows) + f" {turn} - - 0 1"
+
+
+def flip_grid(grid):
+    return [row[::-1] for row in grid[::-1]]
+
+
+def needs_flip(grid):
+    w_rows, b_rows = [], []
+    for r in range(8):
+        for c in range(8):
+            p = grid[r][c]
+            if p == ".":
+                continue
+            (w_rows if p.isupper() else b_rows).append(r)
+    if not w_rows or not b_rows:
+        return False
+    return sum(w_rows) / len(w_rows) < sum(b_rows) / len(b_rows)
+==> scripts/recognize.py <==
+import cv2, pickle, sys
+from boardlib import *
+
+name = sys.argv[1]            # image file
+tfile = sys.argv[2]           # templates file
+
+templates = pickle.load(open(tfile, "rb"))
+img = cv2.imread(name)
+if img is None:
+    print("Can't open", name)
+    raise SystemExit
+y = int(sys.argv[3]) if len(sys.argv) > 3 else None
+board = find_board(img, y)
+if board is None:
+    print("Board not found. Add the Y number at the end of the command.")
+    raise SystemExit
+cv2.imwrite("output/preview.png", board)
+squares = split(board)
+
+for r in range(8):
+    line = ""
+    for c in range(8):
+        sq = squares[r][c]
+        if is_empty(sq):
+            line += ". "
+            continue
+        f = features(sq)
+        best, best_score = "?", 1e9
+        for piece, plist in templates.items():
+            for t in plist:
+                score = abs(f - t).mean()
+                if score < best_score:
+                    best, best_score = piece, score
+        line += best + " "
+    print(line)
+==> scripts/make_templates.py <==
+import cv2, pickle, sys
+from boardlib import *
+
+img = cv2.imread(sys.argv[1])
+if img is None:
+    print("Can't open", sys.argv[1])
+    raise SystemExit
+y = None
+box = None
+for a in sys.argv[3:]:
+    if a.isdigit():
+        y = int(a)
+    elif a.startswith("crop="):
+        box = tuple(int(v) for v in a[5:].split(","))
+
+board = find_board(img, y, box)
+if board is None or board.size == 0:
+    print("Board not found.")
+    raise SystemExit
+cv2.imwrite("output/preview.png", board)
+squares = split(board)
+
+layout = {0: "rnbqkbnr", 1: "pppppppp",
+          6: "PPPPPPPP", 7: "RNBQKBNR"}
+
+templates = {}
+for r, row in layout.items():
+    for c, piece in enumerate(row):
+        templates.setdefault(piece, []).append(features(squares[r][c]))
+
+pickle.dump(templates, open(sys.argv[2], "wb"))
+print("Saved", len(templates), "piece types")
+==> scripts/measure.py <==
+import cv2, sys
+
+img = cv2.imread(sys.argv[1])
+H, W = img.shape[:2]
+print("Image size:", W, "x", H)
+
+# Part 1: try to find the board automatically
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+edges = cv2.dilate(cv2.Canny(gray, 50, 150), None, iterations=2)
+cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+best, area = None, 0
+for c in cnts:
+    x, y, w, h = cv2.boundingRect(c)
+    if 0.9 < w / h < 1.1 and w > W * 0.5 and w * h > area:
+        best, area = (x, y, w, h), w * h
+if best:
+    x, y, w, h = best
+    s = min(w, h)
+    print(f"Try: crop={x},{y},{s}")
+    cv2.imwrite("output/measure_preview.png", img[y:y+s, x:x+s])
+else:
+    print("Auto-find failed, use the grid image")
+
+# Part 2: draw a ruler grid so you can read the numbers yourself
+g = img.copy()
+for v in range(0, W, 100):
+    cv2.line(g, (v, 0), (v, H), (0, 0, 255), 2)
+    cv2.putText(g, str(v), (v + 4, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+for v in range(0, H, 100):
+    cv2.line(g, (0, v), (W, v), (255, 0, 0), 2)
+    cv2.putText(g, str(v), (4, v - 6), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
+cv2.imwrite("output/grid.png", g)
+print("Saved output/grid.png")
+==> scripts/tofen.py <==
+import cv2, pickle, sys, os, chess
+from boardlib import *
+
+name, tfile = sys.argv[1], sys.argv[2]
+turn = sys.argv[3]                      # w or b
+
+y = None
+box = None
+use_ai = "ai" in sys.argv               # add the word "ai" to use the AI model
+for a in sys.argv[4:]:
+    if a.isdigit():
+        y = int(a)                      # a plain number = board Y position
+    elif a.startswith("crop="):         # crop=X,Y,SIZE
+        box = tuple(int(v) for v in a[5:].split(","))
+
+img = cv2.imread(name)
+if img is None:
+    print("Can't open", name)
+    raise SystemExit
+board = find_board(img, y, box)
+if board is None or board.size == 0:
+    print("Board not found. Add the Y number or crop=X,Y,SIZE.")
+    raise SystemExit
+cv2.imwrite("output/preview.png", board)
+
+if use_ai:
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(here, "..", "ai"))
+    from ai_recognize import recognize_ai, weak_squares
+    grid, conf = recognize_ai(board)
+else:
+    templates = pickle.load(open(tfile, "rb"))
+    grid = recognize_grid(split(board), templates, show="scores" in sys.argv)
+    conf = None
+
+if "flip" in sys.argv:
+    grid = flip_grid(grid)
+    if conf: conf = flip_grid(conf)
+elif "noflip" not in sys.argv and needs_flip(grid):
+    grid = flip_grid(grid)
+    if conf: conf = flip_grid(conf)
+
+fen = grid_to_fen(grid, turn)
+print("FEN:", fen)
+
+b = chess.Board(fen)
+print(b)
+print("Valid position:", b.is_valid())
+
+if conf:
+    low = min(min(row) for row in conf)
+    print("AI lowest confidence: %.2f" % low)
+    if low < 0.80:
+        print("LOW confidence: check the board by eye before trusting it.")
+==> scripts/analyze.py <==
+import cv2, pickle, sys, os, chess, chess.engine
+from boardlib import *
+
+name, tfile, turn = sys.argv[1], sys.argv[2], sys.argv[3]
+
+y = None
+box = None
+use_ai = "ai" in sys.argv               # add the word "ai" to use the AI model
+for a in sys.argv[4:]:
+    if a.isdigit():
+        y = int(a)                      # a plain number = board Y position
+    elif a.startswith("crop="):         # crop=X,Y,SIZE
+        box = tuple(int(v) for v in a[5:].split(","))
+
+img = cv2.imread(name)
+if img is None:
+    print("Can't open", name)
+    raise SystemExit
+board = find_board(img, y, box)
+if board is None or board.size == 0:
+    print("Board not found. Add the Y number or crop=X,Y,SIZE.")
+    raise SystemExit
+
+if use_ai:
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(here, "..", "ai"))
+    from ai_recognize import recognize_ai
+    grid, conf = recognize_ai(board)
+else:
+    templates = pickle.load(open(tfile, "rb"))
+    grid = recognize_grid(split(board), templates, show="scores" in sys.argv)
+    conf = None
+
+if "flip" in sys.argv:
+    grid = flip_grid(grid)
+elif "noflip" not in sys.argv and needs_flip(grid):
+    grid = flip_grid(grid)
+
+fen = grid_to_fen(grid, turn)
+print("FEN:", fen)
+if conf:
+    low = min(min(row) for row in conf)
+    print("AI lowest confidence: %.2f" % low)
+    if low < 0.80:
+        print("LOW confidence: check the board by eye before trusting it.")
+
+b = chess.Board(fen)
+if not b.is_valid():
+    print("Invalid position, check the recognition first.")
+    raise SystemExit
+
+engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+info = engine.analyse(b, chess.engine.Limit(time=3))
+engine.quit()
+
+move = info["pv"][0]
+print("Best move:", b.san(move))
+print("Score:", info["score"].pov(b.turn))
+==> scripts/dev/autosplit.py <==
+import cv2
+import os
+import shutil
+
+img = cv2.imread("assets/screenshots/board_lichess.png")
+H, W = img.shape[:2]
+
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+edges = cv2.Canny(gray, 50, 150)
+edges = cv2.dilate(edges, None, iterations=2)
+
+contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+best, best_area = None, 0
+for cnt in contours:
+    x, y, w, h = cv2.boundingRect(cnt)
+    squareish = 0.95 < w / h < 1.05
+    big = w > W * 0.5
+    if squareish and big and w * h > best_area:
+        best, best_area = (x, y, w, h), w * h
+
+if best is None:
+    print("Board not found, use manual X/Y/SIZE")
+    raise SystemExit
+
+x, y, w, h = best
+size = min(w, h)
+board = img[y:y+size, x:x+size]
+print("Found board at", x, y, "size", size)
+cv2.imwrite("output/preview.png", board)
+
+if os.path.exists("output/squares"):
+    shutil.rmtree("output/squares")
+os.makedirs("output/squares", exist_ok=True)
+
+step = size // 8
+for r in range(8):
+    for c in range(8):
+        sq = board[r*step:(r+1)*step, c*step:(c+1)*step]
+        cv2.imwrite(f"output/squares/{r}{c}.png", sq)
+print("Saved 64 squares")
+==> scripts/dev/findy.py <==
+import cv2, sys
+
+img = cv2.imread(sys.argv[1])
+H, W = img.shape[:2]
+print("Size:", W, "x", H)
+
+for y in range(0, H - W + 1, 50):
+    cv2.imwrite(f"output/try_{y}.png", img[y:y+W, 0:W])
+    print("saved try_%d.png" % y)
+==> scripts/dev/split.py <==
+import cv2
+import os
+import shutil
+
+img = cv2.imread("assets/screenshots/board_lichess.png")
+h, w = img.shape[:2]
+print("Image size:", w, "x", h)
+
+# Board position inside the screenshot (change these!)
+X = 0       # pixels from the left edge to the board
+Y = 634     # pixels from the top edge to the board
+SIZE = w    # width of the board (it is a square)
+
+board = img[Y:Y+SIZE, X:X+SIZE]
+cv2.imwrite("output/preview.png", board)
+
+# Delete old squares so the count is always 64
+if os.path.exists("output/squares"):
+    shutil.rmtree("output/squares")
+os.makedirs("output/squares", exist_ok=True)
+
+step = SIZE // 8
+for r in range(8):
+    for c in range(8):
+        sq = board[r*step:(r+1)*step, c*step:(c+1)*step]
+        cv2.imwrite(f"output/squares/{r}{c}.png", sq)
+
+print("Saved 64 squares")
+==> scripts/dev/test.py <==
+import cv2, chess
+print(cv2.__version__)
+board = chess.Board()
+print(board)
+==> scripts/pipeline.py <==
+"""One entry point for reading a chess screenshot.
+The command-line scripts and (later) the Android app both call this file.
+It never prints; it returns a dictionary."""
+import os, sys, pickle, cv2
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from boardlib import (find_board, split, recognize_grid, grid_to_fen,
+                      flip_grid, needs_flip)
+
+LOW_CONF = 0.80          # AI confidence below this = check the board by eye
+
+
+def _photo_fallback(img):
+    """Slower search for a small board inside a bigger picture (AI mode only)."""
+    sys.path.insert(0, os.path.join(HERE, "..", "ai"))
+    from photo_board import photo_box
+    box, quality = photo_box(img)
+    if box is None or quality < 0.6:
+        return None
+    x, y, s = box
+    return img[y:y+s, x:x+s]
+
+
+def read_board(img, use_ai=True, templates=None, crop=None, y=None, flip=None):
+    """Screenshot (OpenCV image) -> grid of pieces.
+    flip: None = auto, True = force flip, False = never flip."""
+    board = find_board(img, y, crop)
+    if (board is None or board.size == 0) and use_ai and crop is None and y is None:
+        board = _photo_fallback(img)         # e.g. a photo of a screen
+    if board is None or board.size == 0:
+        return {"ok": False, "error": "Board not found"}
+
+    conf = None
+    if use_ai:
+        sys.path.insert(0, os.path.join(HERE, "..", "ai"))
+        from ai_recognize import recognize_ai
+        grid, conf = recognize_ai(board)
+    else:
+        if templates is None:
+            return {"ok": False, "error": "No templates given"}
+        grid = recognize_grid(split(board), templates, max_score=40)
+
+    do_flip = needs_flip(grid) if flip is None else flip
+    if do_flip:
+        grid = flip_grid(grid)
+        if conf:
+            conf = flip_grid(conf)
+    low = min(min(r) for r in conf) if conf else None
+    return {"ok": True, "grid": grid, "conf": conf, "min_conf": low,
+            "board": board}
+
+
+def analyze_image(path, turn="w", use_ai=True, templates_file=None,
+                  crop=None, y=None, flip=None, think=3):
+    """Screenshot file -> FEN, best move and score. Returns a dictionary:
+    ok, error, fen, valid, min_conf, low_conf, best_move, score"""
+    img = cv2.imread(path)
+    if img is None:
+        return {"ok": False, "error": "Can't open " + str(path)}
+
+    templates = None
+    if not use_ai:
+        try:
+            templates = pickle.load(open(templates_file, "rb"))
+        except Exception as e:
+            return {"ok": False, "error": "Templates: %s" % e}
+
+    r = read_board(img, use_ai, templates, crop, y, flip)
+    if not r["ok"]:
+        return r
+
+    import chess, chess.engine           # only needed from here on
+    fen = grid_to_fen(r["grid"], turn)
+    b = chess.Board(fen)
+    out = {"ok": True, "error": None, "fen": fen, "board_text": str(b),
+           "valid": b.is_valid(), "min_conf": r["min_conf"],
+           "low_conf": r["min_conf"] is not None and r["min_conf"] < LOW_CONF,
+           "best_move": None, "score": None}
+    if not out["valid"]:
+        out["error"] = "Invalid position: check the recognition first"
+        return out
+
+    path_sf = os.environ.get("STOCKFISH_PATH", "stockfish")
+    try:
+        engine = chess.engine.SimpleEngine.popen_uci(path_sf)
+    except Exception as e:
+        out["error"] = "Stockfish not found (%s)" % e
+        return out
+    try:
+        info = engine.analyse(b, chess.engine.Limit(time=think))
+    finally:
+        engine.quit()
+    out["best_move"] = b.san(info["pv"][0]) if info.get("pv") else None
+    out["score"] = str(info["score"].pov(b.turn))
+    return out
+==> scripts/scan.py <==
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pipeline import analyze_image
+
+# python scripts/scan.py IMAGE TURN [ai] [crop=X,Y,SIZE] [flip|noflip] [templates=FILE]
+path, turn = sys.argv[1], sys.argv[2]
+use_ai = "ai" in sys.argv
+crop = None
+tfile = None
+flip = None
+for a in sys.argv[3:]:
+    if a.startswith("crop="):
+        crop = tuple(int(v) for v in a[5:].split(","))
+    elif a.startswith("templates="):
+        tfile = a[10:]
+    elif a == "flip":
+        flip = True
+    elif a == "noflip":
+        flip = False
+
+res = analyze_image(path, turn, use_ai, tfile, crop, None, flip)
+if not res["ok"]:
+    print("Error:", res["error"])
+    raise SystemExit
+print(res["board_text"])
+print("FEN:", res["fen"])
+if res["min_conf"] is not None:
+    print("AI confidence: %.2f" % res["min_conf"] +
+          ("   LOW: check the board by eye" if res["low_conf"] else ""))
+if res["error"]:
+    print("Error:", res["error"])
+else:
+    print("Best move:", res["best_move"])
+    print("Score:", res["score"])
+==> scripts/web.py <==
+"""Tiny local web page: pick a screenshot OR use live camera to get the best move.
+Run:  python scripts/web.py   then open  http://127.0.0.1:8000  in your browser.
+It only listens on this device (127.0.0.1), nobody else can reach it."""
+import os, sys, tempfile
+from flask import Flask, request, render_template_string, jsonify
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import pipeline
+
+ROOT = os.path.dirname(HERE)
+TEMPLATES = os.path.join(ROOT, "assets", "templates", "t_review.pkl")
+
+app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024      # uploads up to 20 MB
+
+PAGE = """<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess board analyzer</title>
+<style>
+ body{font-family:sans-serif;background:#161512;color:#ddd;margin:0;padding:16px;max-width:560px;margin:auto}
+ h1{font-size:20px;margin-bottom:12px}
+ label{display:block;margin:10px 0 4px}
+ input,select,button{font-size:16px;padding:10px;border-radius:8px;border:0;width:100%;box-sizing:border-box}
+ input[type=range]{padding:0;margin:6px 0}
+ button{background:#629924;color:#fff;margin-top:10px;cursor:pointer;font-weight:bold}
+ button.sec{background:#3a3733}
+ button.stop{background:#c62828}
+ .tabs{display:flex;gap:8px;margin-bottom:12px}
+ .tabs button{margin-top:0;background:#262421;color:#aaa}
+ .tabs button.active{background:#629924;color:#fff}
+ .row{display:flex;gap:8px}
+ .card{background:#262421;border-radius:10px;padding:12px;margin-top:16px}
+ .big{font-size:28px;font-weight:bold;color:#9fd356}
+ .warn{color:#ffb74d} .err{color:#ef5350} .muted{color:#999;font-size:13px}
+ code{word-break:break-all;font-size:13px} a{color:#7fb3ff}
+ svg{max-width:100%;height:auto;display:block;margin:0 auto 10px}
+ .cam-wrap{position:relative;width:100%;margin-top:10px;border-radius:8px;overflow:hidden;background:#000}
+ video{width:100%;display:block;transform-origin:center center;transition:transform 0.15s ease}
+ .guide{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+ .guide-box{width:78%;aspect-ratio:1/1;border:2px dashed rgba(159,211,86,0.65);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,0.28)}
+ .hidden{display:none}
+</style></head><body>
+<h1>Chess board analyzer</h1>
+
+<div class="tabs">
+ <button type="button" id="tab-cam" class="active" onclick="switchMode('cam')">Live Camera</button>
+ <button type="button" id="tab-file" onclick="switchMode('file')">Upload Screenshot</button>
+</div>
+
+<!-- Shared Settings -->
+<div class="card" style="margin-top:0">
+ <label>Side to move</label>
+ <select id="turn" name="turn">
+  <option value="w" {{ 'selected' if turn=='w' }}>White</option>
+  <option value="b" {{ 'selected' if turn=='b' }}>Black</option>
+ </select>
+ <label>Board orientation</label>
+ <select id="flip" name="flip">
+  <option value="auto">Auto</option>
+  <option value="flip">Force flip</option>
+  <option value="noflip">Never flip</option>
+ </select>
+ <label><input type="checkbox" id="ai" name="ai" checked style="width:auto"> Use AI reader</label>
+</div>
+
+<!-- Mode 1: Camera -->
+<div id="panel-cam" class="card">
+ <button type="button" id="btn-start-cam" onclick="startCamera()">Start Main Camera (2x)</button>
+
+ <div id="cam-controls" class="hidden">
+  <label>Camera Lens (avoid 0.5x ultrawide)</label>
+  <select id="cam-select" onchange="switchSelectedCamera()"></select>
+
+  <label>Zoom: <span id="zoom-val">2.0x</span> <span id="zoom-mode" class="muted"></span></label>
+  <input type="range" id="zoom-slider" min="1" max="3" step="0.1" value="2.0" oninput="applyZoom(this.value)">
+
+  <div class="cam-wrap">
+   <video id="video" autoplay playsinline muted></video>
+   <div class="guide"><div class="guide-box"></div></div>
+  </div>
+  <canvas id="canvas" class="hidden"></canvas>
+
+  <div class="row">
+   <button type="button" id="btn-snap" onclick="captureOnce()">Scan Once</button>
+   <button type="button" id="btn-live" class="sec" onclick="toggleLive()">Start Live Scan</button>
+  </div>
+  <div id="live-status" class="muted" style="margin-top:8px">Align the board inside the green box.</div>
+ </div>
+</div>
+
+<!-- Mode 2: Screenshot Upload -->
+<form id="panel-file" class="card hidden" method="post" enctype="multipart/form-data" onsubmit="syncFormSettings()">
+ <input type="hidden" name="turn" id="form-turn">
+ <input type="hidden" name="flip" id="form-flip">
+ <input type="hidden" name="ai" id="form-ai">
+ <label style="margin-top:0">Screenshot</label>
+ <input type="file" name="shot" accept="image/*" required>
+ <button type="submit">Analyze Screenshot</button>
+</form>
+
+<!-- Results Container -->
+<div id="error-box" class="card err {{ '' if error else 'hidden' }}">{{ error or '' }}</div>
+
+<div id="result-box" class="card {{ '' if (res and res.ok) else 'hidden' }}">
+ <div id="res-svg">{% if svg %}{{ svg|safe }}{% endif %}</div>
+ <div id="res-move-wrap" class="{{ '' if (res and res.best_move) else 'hidden' }}">
+  <div class="big" id="res-move">{{ res.best_move if res else '' }}</div>
+  <div>Score: <span id="res-score">{{ res.score if res else '' }}</span> (for the side to move)</div>
+ </div>
+ <div id="res-conf-wrap" class="{{ 'warn' if (res and res.low_conf) else '' }} {{ '' if (res and res.min_conf is not none) else 'hidden' }}">
+  AI confidence: <span id="res-conf">{{ '%.2f'|format(res.min_conf) if (res and res.min_conf is not none) else '' }}</span>
+  <span id="res-low-warn">{{ ': LOW, compare the board above with your view' if (res and res.low_conf) else '' }}</span>
+ </div>
+ <div id="res-sub-err" class="err">{{ res.error if (res and res.error) else '' }}</div>
+ <p>FEN:<br><code id="res-fen">{{ res.fen if res else '' }}</code></p>
+ <a id="res-lichess" href="{{ 'https://lichess.org/analysis/' + res.fen.replace(' ', '_') if res else '#' }}" target="_blank" rel="noopener">Open this position on Lichess</a>
+</div>
+
+<script>
+let stream = null;
+let liveActive = false;
+let isProcessing = false;
+let lastFen = "";
+let currentZoom = 2.0;
+let hardwareZoomSupported = false;
+
+function switchMode(mode) {
+ document.getElementById("panel-cam").classList.toggle("hidden", mode !== "cam");
+ document.getElementById("panel-file").classList.toggle("hidden", mode !== "file");
+ document.getElementById("tab-cam").classList.toggle("active", mode === "cam");
+ document.getElementById("tab-file").classList.toggle("active", mode === "file");
+ if (mode !== "cam" && liveActive) toggleLive();
+}
+
+function syncFormSettings() {
+ document.getElementById("form-turn").value = document.getElementById("turn").value;
+ document.getElementById("form-flip").value = document.getElementById("flip").value;
+ document.getElementById("form-ai").value = document.getElementById("ai").checked ? "on" : "";
+}
+
+function pickBestMainCamera(devices) {
+ const videoDevices = devices.filter(d => d.kind === "videoinput");
+ if (!videoDevices.length) return null;
+
+ // Prefer back/environment cameras that are NOT ultrawide/macro/telephoto
+ const backCams = videoDevices.filter(d => /back|rear|environment/i.test(d.label));
+ const pool = backCams.length ? backCams : videoDevices;
+
+ const mainCam = pool.find(d => !/wide|0\.5|0\.6|macro|depth|tele/i.test(d.label));
+ return (mainCam || pool[0]).deviceId;
+}
+
+async function populateCameraList(activeDeviceId) {
+ const devices = await navigator.mediaDevices.enumerateDevices();
+ const select = document.getElementById("cam-select");
+ select.innerHTML = "";
+ devices.filter(d => d.kind === "videoinput").forEach((d, idx) => {
+  const opt = document.createElement("option");
+  opt.value = d.deviceId;
+  opt.textContent = d.label || `Camera ${idx + 1}`;
+  if (d.deviceId === activeDeviceId) opt.selected = true;
+  select.appendChild(opt);
+ });
+}
+
+async function startCamera(requestedDeviceId = null) {
+ if (stream) {
+  stream.getTracks().forEach(t => t.stop());
+ }
+ try {
+  // Initial permission grant + device discovery if no specific deviceId was passed
+  if (!requestedDeviceId) {
+   const tempStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" } },
+    audio: false
+   });
+   const devices = await navigator.mediaDevices.enumerateDevices();
+   tempStream.getTracks().forEach(t => t.stop());
+   requestedDeviceId = pickBestMainCamera(devices);
+  }
+
+  const videoConstraints = {
+   width: { ideal: 1920 },
+   height: { ideal: 1080 }
+  };
+  if (requestedDeviceId) {
+   videoConstraints.deviceId = { exact: requestedDeviceId };
+  } else {
+   videoConstraints.facingMode = { ideal: "environment" };
+  }
+
+  stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+  const video = document.getElementById("video");
+  video.srcObject = stream;
+
+  const track = stream.getVideoTracks()[0];
+  const settings = track.getSettings();
+  await populateCameraList(settings.deviceId);
+
+  document.getElementById("cam-controls").classList.remove("hidden");
+  document.getElementById("btn-start-cam").textContent = "Restart Camera";
+  document.getElementById("error-box").classList.add("hidden");
+
+  // Apply default 2.0x zoom once stream starts
+  await applyZoom(document.getElementById("zoom-slider").value);
+ } catch (err) {
+  showError("Camera error: " + err.message);
+ }
+}
+
+function switchSelectedCamera() {
+ const deviceId = document.getElementById("cam-select").value;
+ startCamera(deviceId);
+}
+
+async function applyZoom(val) {
+ currentZoom = parseFloat(val);
+ document.getElementById("zoom-val").textContent = currentZoom.toFixed(1) + "x";
+ const video = document.getElementById("video");
+ const modeLabel = document.getElementById("zoom-mode");
+
+ hardwareZoomSupported = false;
+ if (stream) {
+  const track = stream.getVideoTracks()[0];
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  if (caps.zoom) {
+   const clamped = Math.min(Math.max(currentZoom, caps.zoom.min), caps.zoom.max);
+   try {
+    await track.applyConstraints({ advanced: [{ zoom: clamped }] });
+    hardwareZoomSupported = true;
+    video.style.transform = "scale(1)";
+    modeLabel.textContent = "(optical/sensor zoom)";
+    return;
+   } catch (e) {
+    // Fallback to digital center crop below
+   }
+  }
+ }
+
+ // Software 2x center-crop preview & capture fallback
+ video.style.transform = `scale(${currentZoom})`;
+ modeLabel.textContent = "(digital crop zoom)";
+}
+
+function toggleLive() {
+ liveActive = !liveActive;
+ const btn = document.getElementById("btn-live");
+ const status = document.getElementById("live-status");
+ if (liveActive) {
+  btn.textContent = "Stop Live Scan";
+  btn.classList.add("stop");
+  status.textContent = "Live scanning active...";
+  liveLoop();
+ } else {
+  btn.textContent = "Start Live Scan";
+  btn.classList.remove("stop");
+  status.textContent = "Live scan paused.";
+ }
+}
+
+async function liveLoop() {
+ if (!liveActive) return;
+ await captureAndSend(true);
+ if (liveActive) {
+  setTimeout(liveLoop, 400);
+ }
+}
+
+async function captureOnce() {
+ document.getElementById("live-status").textContent = "Scanning frame...";
+ await captureAndSend(false);
+ if (!liveActive) {
+  document.getElementById("live-status").textContent = "Scan complete.";
+ }
+}
+
+async function captureAndSend(isLive) {
+ if (isProcessing || !stream) return;
+ const video = document.getElementById("video");
+ if (video.videoWidth === 0) return;
+
+ isProcessing = true;
+ const canvas = document.getElementById("canvas");
+ const vw = video.videoWidth;
+ const vh = video.videoHeight;
+
+ // If hardware zoom wasn't supported, crop the center region matching currentZoom
+ const cropFactor = hardwareZoomSupported ? 1.0 : currentZoom;
+ const sw = Math.round(vw / cropFactor);
+ const sh = Math.round(vh / cropFactor);
+ const sx = Math.round((vw - sw) / 2);
+ const sy = Math.round((vh - sh) / 2);
+
+ canvas.width = sw;
+ canvas.height = sh;
+ canvas.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+
+ const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.90));
+ const formData = new FormData();
+ formData.append("shot", blob, "frame.jpg");
+ formData.append("turn", document.getElementById("turn").value);
+ formData.append("flip", document.getElementById("flip").value);
+ if (document.getElementById("ai").checked) formData.append("ai", "on");
+
+ try {
+  const resp = await fetch("/api/analyze", { method: "POST", body: formData });
+  const data = await resp.json();
+  if (!data.ok) {
+   if (!isLive) showError(data.error);
+   else document.getElementById("live-status").textContent = "Live scan: " + data.error;
+  } else {
+   renderResult(data);
+   if (isLive) {
+    document.getElementById("live-status").textContent =
+     (data.fen === lastFen) ? "Live: Position unchanged" : "Live: Board updated!";
+   }
+   lastFen = data.fen;
+  }
+ } catch (e) {
+  if (!isLive) showError("Network error: " + e.message);
+ } finally {
+  isProcessing = false;
+ }
+}
+
+function showError(msg) {
+ const errBox = document.getElementById("error-box");
+ errBox.textContent = msg;
+ errBox.classList.remove("hidden");
+}
+
+function renderResult(data) {
+ document.getElementById("error-box").classList.add("hidden");
+ document.getElementById("result-box").classList.remove("hidden");
+ document.getElementById("res-svg").innerHTML = data.svg || "";
+
+ const moveWrap = document.getElementById("res-move-wrap");
+ if (data.best_move) {
+  moveWrap.classList.remove("hidden");
+  document.getElementById("res-move").textContent = data.best_move;
+  document.getElementById("res-score").textContent = data.score;
+ } else {
+  moveWrap.classList.add("hidden");
+ }
+
+ const confWrap = document.getElementById("res-conf-wrap");
+ if (data.min_conf !== null && data.min_conf !== undefined) {
+  confWrap.classList.remove("hidden");
+  confWrap.classList.toggle("warn", !!data.low_conf);
+  document.getElementById("res-conf").textContent = Number(data.min_conf).toFixed(2);
+  document.getElementById("res-low-warn").textContent =
+   data.low_conf ? ": LOW, compare the board above with your view" : "";
+ } else {
+  confWrap.classList.add("hidden");
+ }
+
+ document.getElementById("res-sub-err").textContent = data.error || "";
+ document.getElementById("res-fen").textContent = data.fen;
+ document.getElementById("res-lichess").href =
+  "https://lichess.org/analysis/" + data.fen.replace(/ /g, "_");
+}
+</script>
+</body></html>"""
+
+
+def board_svg(fen, best, turn):
+    """Draw the position the program read, with an arrow for the best move."""
+    try:
+        import chess, chess.svg
+        b = chess.Board(fen)
+        arrows = []
+        if best:
+            m = b.parse_san(best)
+            arrows = [chess.svg.Arrow(m.from_square, m.to_square, color="#2e8b57cc")]
+        return chess.svg.board(b, size=340, arrows=arrows, flipped=(turn == "b"))
+    except Exception:
+        return None
+
+
+def process_upload(file_storage, turn, flip_raw, use_ai):
+    """Save upload to a temp file, run pipeline, and clean up."""
+    fd, path = tempfile.mkstemp(suffix=".img")
+    os.close(fd)
+    try:
+        file_storage.save(path)
+        flip = {"flip": True, "noflip": False}.get(flip_raw)
+        res = pipeline.analyze_image(path, turn, use_ai, TEMPLATES, None, None, flip)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
+    return res
+
+
+@app.route("/api/analyze", methods=["POST"])
+def api_analyze():
+    """JSON endpoint for live camera frames."""
+    f = request.files.get("shot")
+    if not f:
+        return jsonify({"ok": False, "error": "No frame received."})
+    turn = "b" if request.form.get("turn") == "b" else "w"
+    use_ai = request.form.get("ai") == "on"
+    res = process_upload(f, turn, request.form.get("flip"), use_ai)
+    if not res["ok"]:
+        return jsonify({"ok": False, "error": res["error"]})
+    return jsonify({
+        "ok": True,
+        "fen": res["fen"],
+        "best_move": res.get("best_move"),
+        "score": res.get("score"),
+        "min_conf": res.get("min_conf"),
+        "low_conf": res.get("low_conf"),
+        "error": res.get("error"),
+        "svg": board_svg(res["fen"], res.get("best_move"), turn),
+    })
+
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    res = svg = error = None
+    turn = "w"
+    if request.method == "POST":
+        turn = "b" if request.form.get("turn") == "b" else "w"
+        f = request.files.get("shot")
+        if not f or not f.filename:
+            error = "Choose a screenshot first."
+        else:
+            use_ai = request.form.get("ai") == "on"
+            res = process_upload(f, turn, request.form.get("flip"), use_ai)
+            if not res["ok"]:
+                error, res = res["error"], None
+            else:
+                svg = board_svg(res["fen"], res["best_move"], turn)
+    return render_template_string(PAGE, res=res, svg=svg, error=error, turn=turn)
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=8000, debug=False)
+
+
+==> ai/test_ai.py <==
+import os, sys, cv2
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+from boardlib import find_board, flip_grid, needs_flip, grid_to_fen
+from ai_recognize import recognize_ai, weak_squares
+
+name = sys.argv[1]
+box = None
+expect = None
+for a in sys.argv[2:]:
+    if a.startswith("crop="):
+        box = tuple(int(v) for v in a[5:].split(","))
+    elif a.startswith("expect="):
+        expect = a[7:]
+
+img = cv2.imread(name)
+if img is None:
+    print("Can't open", name)
+    raise SystemExit
+board = find_board(img, None, box)
+if board is None or board.size == 0:
+    print("Board not found")
+    raise SystemExit
+
+grid, conf = recognize_ai(board)
+if needs_flip(grid):
+    grid = flip_grid(grid)
+    conf = flip_grid(conf)
+
+for row in grid:
+    print(" ".join(row))
+
+placement = grid_to_fen(grid).split(" ")[0]
+print("Placement:", placement)
+print("Lowest confidence: %.2f" % min(min(r) for r in conf))
+weak = weak_squares(conf)
+print("Weak squares (<0.90):", [(r, c, round(v, 2)) for r, c, v in weak] or "none")
+
+if expect:
+    print("MATCH" if placement == expect else "DIFFERENT from expected")
+==> ai/ai_recognize.py <==
+import os
+import cv2
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+MODEL = os.path.join(HERE, "models", "chess-tiles-v2.onnx")
+LABELS = "1KQRBNPkqrbnp"          # index 0 = empty square
+
+_net = None
+
+
+def _load():
+    global _net
+    if _net is None:
+        if not os.path.exists(MODEL):
+            raise FileNotFoundError("Model not found: " + MODEL)
+        _net = cv2.dnn.readNetFromONNX(MODEL)
+    return _net
+
+
+def recognize_ai(board):
+    """board: BGR image that contains exactly the 8x8 board.
+    Returns (grid, conf): 8x8 lists of piece letters ('.' = empty)
+    and of confidences (0 to 1), top-left square first."""
+    gray = cv2.cvtColor(board, cv2.COLOR_BGR2GRAY)
+    gray = cv2.resize(gray, (256, 256), interpolation=cv2.INTER_LINEAR)
+    gray = gray.astype("float32") / 255.0
+
+    tiles = np.zeros((64, 1024), dtype="float32")
+    for r in range(8):
+        for c in range(8):
+            t = gray[r*32:(r+1)*32, c*32:(c+1)*32]
+            tiles[r*8 + c] = t.reshape(1024)
+
+    net = _load()
+    net.setInput(tiles)
+    out = np.array(net.forward()).reshape(64, 13)
+
+    # make sure rows are probabilities (they should already be)
+    if out.min() < 0 or abs(out.sum(axis=1).mean() - 1.0) > 0.05:
+        e = np.exp(out - out.max(axis=1, keepdims=True))
+        out = e / e.sum(axis=1, keepdims=True)
+
+    grid, conf = [], []
+    for r in range(8):
+        grow, crow = [], []
+        for c in range(8):
+            p = out[r*8 + c]
+            k = int(p.argmax())
+            grow.append("." if k == 0 else LABELS[k])
+            crow.append(float(p[k]))
+        grid.append(grow)
+        conf.append(crow)
+    return grid, conf
+
+
+def weak_squares(conf, limit=0.9):
+    """List of (row, col, confidence) below the limit."""
+    return [(r, c, conf[r][c]) for r in range(8) for c in range(8)
+            if conf[r][c] < limit]

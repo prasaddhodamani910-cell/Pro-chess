@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Prasad Chess Engine</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#18191c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-chesscom-green">
+
+    <!-- Header -->
+    <header>
+        <div class="logo-area">
+            <span class="logo-icon">♟️</span>
+            <div class="logo-text">
+                <h1>Prasad Chess Engine</h1>
+                <span class="subtitle">Stockfish-Calibrated Engine • Hand Play</span>
+            </div>
+        </div>
+        <div class="header-controls">
+            <div class="elo-badge" id="header-elo-badge">3000 Elo</div>
+            <button class="btn btn-primary" id="btn-new-game">
+                <span>🔄</span> New Game
+            </button>
+            <button class="btn" id="btn-settings">
+                <span>⚙️</span> Settings
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        <!-- Game Board Section -->
+        <div class="game-section">
+            <!-- Opponent Bar -->
+            <div class="player-bar">
+                <div class="player-details">
+                    <div class="player-avatar">🤖</div>
+                    <div>
+                        <span class="player-name">PrasadChessEngine</span>
+                        <span class="player-elo" id="opponent-elo-text">(3000)</span>
+                    </div>
+                </div>
+                <div class="captured-pieces" id="captured-black"></div>
+                <span class="material-diff" id="mat-diff-black"></span>
+            </div>
+
+            <!-- Board + Eval Bar Wrapper -->
+            <div class="board-wrapper">
+                <!-- Evaluation Bar -->
+                <div class="eval-bar-container">
+                    <div class="eval-bar-black" id="eval-black"></div>
+                    <div class="eval-bar-white" id="eval-white"></div>
+                    <div class="eval-text" id="eval-text">0.0</div>
+                </div>
+
+                <!-- 8x8 Chess Board -->
+                <div class="chess-board" id="chess-board"></div>
+            </div>
+
+            <!-- Player Bar -->
+            <div class="player-bar">
+                <div class="player-details">
+                    <div class="player-avatar">👤</div>
+                    <div>
+                        <span class="player-name">You (Human)</span>
+                    </div>
+                </div>
+                <div class="captured-pieces" id="captured-white"></div>
+                <span class="material-diff" id="mat-diff-white"></span>
+            </div>
+        </div>
+
+        <!-- Right Control & Move Panel -->
+        <div class="panel-section">
+            <div class="panel-header">
+                <h2>Game Information</h2>
+                <span class="engine-status-tag" id="engine-status">Ready</span>
+            </div>
+
+            <!-- Notation History -->
+            <div class="notation-panel" id="notation-panel"></div>
+
+            <!-- Action Controls -->
+            <div class="action-bar">
+                <button class="btn" id="btn-undo" title="Takeback Move">
+                    <span>↩️</span> Undo
+                </button>
+                <button class="btn" id="btn-hint" title="Suggest Best Move">
+                    <span>💡</span> Hint
+                </button>
+                <button class="btn" id="btn-flip" title="Flip Board Perspective">
+                    <span>🔃</span> Flip
+                </button>
+                <button class="btn" id="btn-resign" onclick="document.getElementById('gameover-modal').classList.add('active'); document.getElementById('gameover-title').textContent='Resigned'; document.getElementById('gameover-reason').textContent='You resigned the game';" title="Resign Game">
+                    <span>🏳️</span> Resign
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Settings & Preferences</h3>
+                <button class="modal-close" id="btn-close-settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Elo Skill Level -->
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Engine Skill (Elo)</div>
+                        <div class="setting-desc">Adjust strength from beginner to master level</div>
+                    </div>
+                    <select class="select-control" id="elo-select">
+                        <option value="250">250 Elo (Beginner)</option>
+                        <option value="500">500 Elo (Novice)</option>
+                        <option value="750">750 Elo (Casual)</option>
+                        <option value="1200">1200 Elo (Intermediate)</option>
+                        <option value="1750">1750 Elo (Club Player)</option>
+                        <option value="2200">2200 Elo (Master)</option>
+                        <option value="2700">2700 Elo (Grandmaster)</option>
+                        <option value="3000" selected>3000 Elo (Super GM / Max)</option>
+                    </select>
+                </div>
+
+                <!-- Board Theme -->
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Board Theme</div>
+                        <div class="setting-desc">Customizable Lichess & Chess.com palettes</div>
+                    </div>
+                    <select class="select-control" id="setting-theme">
+                        <option value="chesscom-green" selected>Chess.com Green</option>
+                        <option value="chesscom-wood">Chess.com Wood</option>
+                        <option value="chesscom-dark">Chess.com Dark / Cyber</option>
+                        <option value="lichess-brown">Lichess Brown (Classic)</option>
+                        <option value="lichess-blue">Lichess Blue</option>
+                        <option value="lichess-green">Lichess Green</option>
+                        <option value="royal-purple">Royal Purple</option>
+                    </select>
+                </div>
+
+                <!-- Piece Set -->
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Piece Design</div>
+                        <div class="setting-desc">Vector SVG piece style</div>
+                    </div>
+                    <select class="select-control" id="setting-pieces">
+                        <option value="lichess" selected>Lichess (cburnett)</option>
+                        <option value="chesscom">Chess.com (Neo)</option>
+                    </select>
+                </div>
+
+                <!-- Board Coordinates -->
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Square Coordinates</div>
+                        <div class="setting-desc">Show rank and file notation marks</div>
+                    </div>
+                    <select class="select-control" id="setting-coords">
+                        <option value="true" selected>Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                </div>
+
+                <!-- Move Sounds -->
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Move Sounds</div>
+                        <div class="setting-desc">Synthesized audio effects</div>
+                    </div>
+                    <select class="select-control" id="setting-sound">
+                        <option value="true" selected>Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pawn Promotion Modal -->
+    <div class="modal-overlay" id="promo-modal">
+        <div class="promo-box">
+            <div class="promo-option" data-piece="q" title="Queen"></div>
+            <div class="promo-option" data-piece="r" title="Rook"></div>
+            <div class="promo-option" data-piece="b" title="Bishop"></div>
+            <div class="promo-option" data-piece="n" title="Knight"></div>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div class="modal-overlay" id="gameover-modal">
+        <div class="modal-box" style="text-align: center; max-width: 360px;">
+            <div class="modal-header" style="justify-content: center;">
+                <h3 id="gameover-title">Game Over</h3>
+            </div>
+            <div class="modal-body" style="align-items: center; gap: 20px;">
+                <div id="gameover-reason" style="font-size: 15px; color: var(--text-secondary);"></div>
+                <button class="btn btn-primary" id="btn-rematch" style="padding: 10px 24px; font-size: 15px;">
+                    Play Again
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="pieces.js"></script>
+    <script src="chess_rules.js"></script>
+    <script src="engine.js"></script>
+    <script src="sounds.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Register Service Worker for offline PWA installation
+        if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>
