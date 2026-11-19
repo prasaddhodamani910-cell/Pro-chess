@@ -7,6 +7,22 @@ Detects digital chessboards (Chess.com, Lichess, diagrams, or screen shares), id
 
 ---
 
+## Screenshots
+
+### PC
+
+| Chess.com | Lichess |
+| --- | --- |
+| ![Chessmod running on Chess.com on PC](<Result screenshot/PC_chesscom.jpg>) | ![Chessmod running on Lichess on PC](<Result screenshot/PC_lichess.jpg>) |
+
+### Android
+
+| Chess.com | Lichess |
+| --- | --- |
+| ![Chessmod running on Chess.com on Android](<Result screenshot/android_chesscom.jpg>) | ![Chessmod running on Lichess on Android](<Result screenshot/android_lichess.jpg>) |
+
+---
+
 ## 📱 Android App (.apk) - *Mobile Live Chess Player & Analyzer*
 
 The Android companion application is located in the dedicated [`android_app`](android_app/) folder.
