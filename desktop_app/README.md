@@ -8,12 +8,11 @@ Standalone desktop application for Windows that embeds online chess platforms (C
 ## 🚀 Quick Launch
 
 ### Run the Standalone Executable
-- Double-click [`run_exe.bat`](run_exe.bat)
-- OR download and run [Chessmod.exe](dist/Chessmod/Chessmod.exe) (Windows live chess analysis)
-- Alternate build: [ChessVisionPC.exe](dist/ChessVisionPC/ChessVisionPC.exe) (Windows board recognition app)
+- Double-click **[`run_exe.bat`](file:///C:/Projects%20by%20Prasad/chessproject/desktop_app/run_exe.bat)**
+- OR run directly: **[`dist/Chessmod/Chessmod.exe`](file:///C:/Projects%20by%20Prasad/chessproject/desktop_app/dist/Chessmod/Chessmod.exe)**
 
 ### Run from Python Source
-- Double-click [`run_desktop.bat`](run_desktop.bat)
+- Double-click **[`run_desktop.bat`](file:///C:/Projects%20by%20Prasad/chessproject/desktop_app/run_desktop.bat)**
 
 ---
 

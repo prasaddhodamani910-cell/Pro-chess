@@ -88,26 +88,15 @@ void UCI::loop() {
             std::cout << "id name PrasadChessEngine 1.0\n";
             std::cout << "id author Prasad\n";
             std::cout << "option name Hash type spin default 64 min 1 max 1024\n";
-            std::cout << "option name UCI_LimitStrength type check default false\n";
-            std::cout << "option name UCI_Elo type spin default 3000 min 250 max 3000\n";
             std::cout << "uciok" << std::endl;
         } else if (command == "isready") {
             std::cout << "readyok" << std::endl;
         } else if (command == "setoption") {
             std::string name_token, opt_name, value_token;
-            ss >> name_token >> opt_name;
+            int opt_val = 64;
+            ss >> name_token >> opt_name >> value_token >> opt_val;
             if (opt_name == "Hash" || opt_name == "hash") {
-                int opt_val = 64;
-                ss >> value_token >> opt_val;
                 TT.resize(std::max(1, std::min(1024, opt_val)));
-            } else if (opt_name == "UCI_LimitStrength" || opt_name == "uci_limitstrength") {
-                std::string val_str;
-                ss >> value_token >> val_str;
-                GlobalSearch.set_limit_strength(val_str == "true" || val_str == "1");
-            } else if (opt_name == "UCI_Elo" || opt_name == "uci_elo") {
-                int elo_val = 3000;
-                ss >> value_token >> elo_val;
-                GlobalSearch.set_elo(elo_val);
             }
         } else if (command == "ucinewgame") {
             GlobalSearch.stop();

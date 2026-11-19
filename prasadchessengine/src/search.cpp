@@ -6,11 +6,10 @@
 #include <chrono>
 #include <algorithm>
 #include <cmath>
-#include <random>
 
 Search GlobalSearch;
 
-Search::Search() : m_stopped(false), m_elo(3000), m_limit_strength(false), m_nodes(0), m_seldepth(0) {
+Search::Search() : m_stopped(false), m_nodes(0), m_seldepth(0) {
     init_lmr();
     clear_history();
 }
@@ -433,21 +432,6 @@ void Search::start_search(Board& board, const Limits& limits) {
     m_timeman.init(limits, board.side_to_move());
 
     int max_depth = limits.depth > 0 ? limits.depth : 64;
-    int blunder_chance = 0;
-
-    if (m_limit_strength || m_elo < 3000) {
-        int elo_depth = 64;
-        if (m_elo <= 250) { elo_depth = 1; blunder_chance = 65; }
-        else if (m_elo <= 500) { elo_depth = 2; blunder_chance = 40; }
-        else if (m_elo <= 750) { elo_depth = 3; blunder_chance = 20; }
-        else if (m_elo <= 1200) { elo_depth = 4; blunder_chance = 8; }
-        else if (m_elo <= 1750) { elo_depth = 6; blunder_chance = 2; }
-        else if (m_elo <= 2200) { elo_depth = 8; blunder_chance = 0; }
-        else if (m_elo <= 2700) { elo_depth = 12; blunder_chance = 0; }
-        else { elo_depth = 64; blunder_chance = 0; }
-
-        max_depth = std::min(max_depth, elo_depth);
-    }
     Move best_move = MOVE_NONE;
     Value best_score = -VALUE_INF;
 
@@ -519,20 +503,6 @@ void Search::start_search(Board& board, const Limits& limits) {
         MoveList list;
         generate_legal_moves(board, list, GEN_ALL);
         if (list.size() > 0) best_move = list.move(0);
-    } else if (blunder_chance > 0) {
-        MoveList list;
-        generate_legal_moves(board, list, GEN_ALL);
-        if (list.size() > 1) {
-            static std::mt19937 rng(std::random_device{}());
-            std::uniform_int_distribution<int> dist(0, 99);
-            if (dist(rng) < blunder_chance) {
-                std::uniform_int_distribution<int> move_dist(0, list.size() - 1);
-                Move candidate = list.move(move_dist(rng));
-                if (candidate != best_move) {
-                    best_move = candidate;
-                }
-            }
-        }
     }
 
     std::cout << "bestmove " << move_to_string(best_move) << std::endl;

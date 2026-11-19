@@ -3,17 +3,18 @@
 
 A fast, offline-capable chess board recognition and analysis suite that works on PC (Windows) and Android mobile devices.
 
+### IMP : use this mod on your risk chess.com and lichess acc can be baned, this project was build for only educational purposes only, and personal interest. 
+
 Detects digital chessboards (Chess.com, Lichess, diagrams, or screen shares), identifies all 64 squares, generates FEN positions, and calculates the best moves using integrated engines (Stockfish 19 on PC, and native high-speed engine on Android).
 
 ---
 
 ## 📱 Android App (.apk) - *Mobile Live Chess Player & Analyzer*
 
-The Android companion application is located in the dedicated [`android_app`](android_app/) folder.
+The Android companion application is located in the dedicated **[`android_app`](file:///C:/Projects%20by%20Prasad/chessproject/android_app)** folder.
 
-- **Pre-built APK:** [Download Chessmod for Android](android_app/dist/Chessmod.apk) (Android chess assistant)
-- **Alternate APK:** [Download ChessVision](android_app/dist/ChessVision.apk) (alternate Android build)
-- **1-Click Rebuild Batch:** [`android_app/build_apk.bat`](android_app/build_apk.bat)
+- **Pre-built APK:** **[`android_app/dist/Chessmod.apk`](file:///C:/Projects%20by%20Prasad/chessproject/android_app/dist/Chessmod.apk)**
+- **1-Click Rebuild Batch:** **[`android_app/build_apk.bat`](file:///C:/Projects%20by%20Prasad/chessproject/android_app/build_apk.bat)**
 
 ### Android Features:
 1. **Accurate Black & White Turn Detection**:
@@ -31,22 +32,17 @@ The Android companion application is located in the dedicated [`android_app`](an
 ## 🚀 Ways to Run on PC
 
 ### 1. Standalone Desktop App (.exe) - *All-in-One Live Chess Player & Analyzer*
-- Double-click [`run_chessmod_pc.bat`](run_chessmod_pc.bat) in the root folder
-- OR open [`desktop_app`](desktop_app/) and double-click [`run_exe.bat`](desktop_app/run_exe.bat)
-- OR run directly: [Chessmod desktop app](desktop_app/dist/Chessmod/Chessmod.exe) (Windows live chess analysis)
-- **Alternate desktop build:** [ChessVisionPC](desktop_app/dist/ChessVisionPC/ChessVisionPC.exe) (Windows board recognition app)
-
-### PrasadChess engine builds
-
-- [PrasadChess desktop app](prasadchessengine/PrasadChess.exe) (Windows graphical engine app)
-- [PrasadChess UCI engine](prasadchessengine/prasadchessengine.exe) (Windows command-line chess engine for UCI-compatible chess software)
-- [PrasadChess Android APK](prasadchessengine/PrasadChess.apk) (Android engine app)
+Open the **[`desktop_app`](file:///C:/Projects%20by%20Prasad/chessproject/desktop_app)** folder and double-click:
+- **`run_exe.bat`**
+- OR directly run **`desktop_app\dist\Chessmod\Chessmod.exe`**
 
 *Features:* Opens full **Chess.com** or **Lichess** in an embedded browser window with an integrated live **Stockfish 19 & AI assistant dock** on the right side. Auto-scans every move live as you play for both White and Black!
 
 ### 2. Web Interface (Browser Dashboard)
-Double-click [`run_pc.bat`](run_pc.bat) (or run `python scripts/web.py`) and visit **`http://127.0.0.1:8000`**.
+Double-click **`run_pc.bat`** (or run `python scripts/web.py`) and visit **`http://127.0.0.1:8000`**.
 *Features:* Paste screenshots (`Ctrl+V`), drag & drop image files, or share your screen/tab.
+
+### IMP: Stockfish is not in the git repo u should include it by your self u may watch yt tutorial.
 
 ---
 
@@ -73,14 +69,24 @@ Double-click [`run_pc.bat`](run_pc.bat) (or run `python scripts/web.py`) and vis
 
 ---
 
-## Project layout
+## 📸 Screenshots
 
-- [`scripts/`](scripts/): Python board recognition, image processing, web interface, and development utilities in `scripts/dev/`.
-- [`ai/`](ai/): AI recognition code and related checks.
-- [`desktop_app/`](desktop_app/): Windows desktop application source (`src/`), assets, build files, and its [guide](desktop_app/README.md).
-- [`android_app/`](android_app/): Android application source, Gradle configuration, and its [guide](android_app/README.md).
-- [`prasadchessengine/`](prasadchessengine/): C++ engine (`src/`), web interface (`gui/`), and platform build scripts; see its [guide](prasadchessengine/README.md).
-- [`assets/`](assets/): input and project media; [`doc/`](doc/): design and implementation notes.
-- `output/` is for generated recognition previews and square images. Treat build and distribution folders as generated artifacts.
+### PC
 
-For the file organization and maintenance notes, see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md). Recent documentation and organization updates are recorded in [CHANGELOG.md](CHANGELOG.md).
+**PC Chess.com**
+
+![PC Chess.com](Result%20screenshot/PC_chesscom.jpg)
+
+**PC Lichess**
+
+![PC Lichess](Result%20screenshot/PC_lichess.jpg)
+
+### Android
+
+**Android Chess.com**
+
+![Android Chess.com](Result%20screenshot/android_chesscom.jpg)
+
+**Android Lichess**
+
+![Android Lichess](Result%20screenshot/android_lichess.jpg)

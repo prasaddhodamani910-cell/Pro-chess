@@ -296,7 +296,7 @@
   }
 
   function parseLichess() {
-    const board = document.querySelector(".main-board cg-board, .round__app cg-board, .analyse__board cg-board, cg-board");
+    const board = document.querySelector("cg-board");
     if (!board) return null;
 
     const pieceEls = board.querySelectorAll("piece");
@@ -306,8 +306,8 @@
     const rect = board.getBoundingClientRect();
     const sq = rect.width / 8;
 
-    const wrap = board.closest(".cg-wrap") || board.closest(".round__app") || document.querySelector(".main-board .cg-wrap") || board.parentElement;
-    const isFlipped = wrap ? wrap.classList.contains("orientation-black") : false;
+    const container = document.querySelector("cg-container");
+    const isFlipped = container && container.classList.contains("orientation-black");
 
     pieceEls.forEach(el => {
       let pieceChar = null;
@@ -369,7 +369,7 @@
         if (moves && moves.length > 0) {
           turn = (moves.length % 2 === 1) ? "b" : "w";
         } else {
-          turn = "w";
+          turn = isFlipped ? "w" : "w";
         }
       }
     }
@@ -580,7 +580,9 @@
       }
     });
 
-    const target = document.querySelector(".main-board, .round__app, .analyse__board, .cg-wrap, wc-chess-board, chess-board, cg-board") ||
+    const target = document.querySelector("wc-chess-board") ||
+                   document.querySelector("chess-board") ||
+                   document.querySelector("cg-board") ||
                    document.body;
 
     if (target) {

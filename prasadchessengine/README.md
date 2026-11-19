@@ -1,13 +1,5 @@
 # PrasadChessEngine
 
-## Ready-to-run builds
-
-- [PrasadChess.exe](PrasadChess.exe) — Windows graphical application.
-- [prasadchessengine.exe](prasadchessengine.exe) — Windows UCI command-line engine for chess GUIs.
-- [PrasadChess.apk](PrasadChess.apk) — Android application package.
-
-These are prebuilt downloads. Build instructions for compiling from source are below.
-
 A high-performance, Stockfish-inspired chess engine written in modern C++ (C++17) using a 64-bit Bitboard architecture, Magic Bitboards, and the Universal Chess Interface (UCI) protocol.
 
 ---

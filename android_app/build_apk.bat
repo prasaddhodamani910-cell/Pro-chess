@@ -45,9 +45,11 @@ if not exist "dist" mkdir dist
 
 set "SOURCE_APK=app\build\outputs\apk\debug\app-debug.apk"
 set "TARGET_APK=dist\Chessmod.apk"
+set "TARGET_APK_LEGACY=dist\ChessVision.apk"
 
 if exist "%SOURCE_APK%" (
     copy /y "%SOURCE_APK%" "%TARGET_APK%" >nul
+    copy /y "%SOURCE_APK%" "%TARGET_APK_LEGACY%" >nul
     echo [OK] APK copied to: %TARGET_APK%
 ) else (
     echo [ERROR] Output APK not found at %SOURCE_APK%
