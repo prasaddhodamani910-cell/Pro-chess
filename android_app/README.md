@@ -60,11 +60,11 @@ android_app/
 
 ## How to Install on Android
 
-1. Transfer **[`android_app/dist/Chessmod.apk`](file:///C:/Projects%20by%20Prasad/chessproject/android_app/dist/Chessmod.apk)** to your Android phone via USB cable, Google Drive, or messaging.
+1. Download [Chessmod.apk](dist/Chessmod.apk) (Android chess assistant) or [ChessVision.apk](dist/ChessVision.apk) (alternate Android build) and transfer it to your phone.
 2. Tap the file on your phone and choose **Install**.
 3. Or install via ADB:
    ```bat
    adb install "android_app\dist\Chessmod.apk"
    ```
 
-To rebuild the APK at any time, run **[`android_app/build_apk.bat`](file:///C:/Projects%20by%20Prasad/chessproject/android_app/build_apk.bat)**.
+To rebuild the APK at any time, run [`build_apk.bat`](build_apk.bat).

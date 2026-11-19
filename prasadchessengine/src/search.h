@@ -18,6 +18,13 @@ public:
     bool is_stopped() const { return m_stopped.load(); }
 
     void clear_history();
+    void set_elo(int elo) {
+        m_elo = (elo < 250) ? 250 : (elo > 3000 ? 3000 : elo);
+        m_limit_strength = (m_elo < 3000);
+    }
+    int get_elo() const { return m_elo; }
+    void set_limit_strength(bool limit) { m_limit_strength = limit; }
+    bool get_limit_strength() const { return m_limit_strength; }
 
 private:
     void init_lmr();
@@ -30,6 +37,9 @@ private:
     std::atomic<bool> m_stopped;
     TimeManager m_timeman;
     Limits m_limits;
+
+    int m_elo = 3000;
+    bool m_limit_strength = false;
 
     uint64_t m_nodes;
     int m_seldepth;

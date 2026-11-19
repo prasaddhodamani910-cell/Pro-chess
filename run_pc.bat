@@ -2,7 +2,8 @@
 setlocal enabledelayedexpansion
 
 echo ========================================================
-echo               CHESS VISION PC LAUNCHER
+echo   CHESSMOD - WEB DASHBOARD LAUNCHER
+echo   by author PRASAD DHODAMANI
 echo ========================================================
 echo.
 
